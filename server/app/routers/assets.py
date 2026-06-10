@@ -1,8 +1,10 @@
+import hashlib
 import mimetypes
 import uuid
+from pathlib import PurePosixPath
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,14 +12,17 @@ from sqlalchemy.orm import selectinload
 
 from app.db import get_session
 from app.deps import AuthContext, get_auth
+from app.indexer import IMAGE_EXTENSIONS, extract_metadata
 from app.models import Asset, Thumbnail
-from app.schemas import AssetOut, AssetPage, AssetUrls
+from app.queue import JobQueue, get_job_queue
+from app.schemas import AssetOut, AssetPage, AssetUrls, UploadResult
 from app.signing import sign_asset_url, verify_asset_signature
 from app.storage import Storage, get_library_storage, get_media_storage
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
 VARIANTS = {"grid", "preview", "original"}
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
 def asset_to_out(asset: Asset) -> AssetOut:
@@ -60,6 +65,72 @@ async def list_assets(
     return AssetPage(items=items, total=total or 0, offset=offset, limit=limit)
 
 
+@router.post("/upload", response_model=UploadResult, status_code=status.HTTP_201_CREATED)
+async def upload_asset(
+    file: UploadFile,
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    media: Annotated[Storage, Depends(get_media_storage)],
+    queue: Annotated[JobQueue, Depends(get_job_queue)],
+) -> UploadResult:
+    """Receive a photo from a client (phone backup). Dedup is by content
+    hash, so re-uploading or uploading a photo the indexer already has is a
+    cheap no-op."""
+    extension = PurePosixPath(file.filename or "upload.jpg").suffix.lower() or ".jpg"
+    if extension not in IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type"
+        )
+
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File too large"
+        )
+
+    content_hash = hashlib.sha256(data).hexdigest()
+    existing = (
+        await session.execute(
+            select(Asset.id).where(
+                Asset.owner_id == auth.user.id, Asset.content_hash == content_hash
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return UploadResult(id=existing, duplicate=True)
+
+    try:
+        width, height, taken_at = extract_metadata(data)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Not a readable image"
+        ) from None
+
+    path = f"uploads/{content_hash[:2]}/{content_hash}{extension}"
+    await media.write(path, data)
+    asset = Asset(
+        owner_id=auth.user.id,
+        storage_path=path,
+        store="uploads",
+        content_hash=content_hash,
+        media_type="image",
+        size_bytes=len(data),
+        width=width,
+        height=height,
+        taken_at=taken_at,
+    )
+    session.add(asset)
+    await session.commit()
+
+    # Backlog jobs are idempotent; fixed ids coalesce repeats during a batch.
+    await queue.enqueue("thumbnail_backlog_job", job_id="thumbs-backlog")
+    await queue.enqueue("embed_backlog_job", job_id="embed-backlog")
+    await queue.enqueue("detect_faces_job", job_id="faces-backlog")
+    await queue.enqueue("cluster_faces_job", str(auth.user.id), job_id="cluster-backlog")
+
+    return UploadResult(id=asset.id, duplicate=False)
+
+
 @router.get("/{asset_id}", response_model=AssetOut)
 async def get_asset(
     asset_id: uuid.UUID,
@@ -97,7 +168,9 @@ async def get_asset_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
 
     if variant == "original":
-        storage, path = library, asset.storage_path
+        # Indexed originals live in the read-only library; uploads in media.
+        storage = library if asset.store == "library" else media
+        path = asset.storage_path
         content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
     else:
         result = await session.execute(

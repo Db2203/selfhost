@@ -1,14 +1,12 @@
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-from arq import create_pool
-from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
 from app.db import get_session
 from app.deps import AuthContext, get_auth
+from app.queue import get_job_queue
 from app.routers.assets import asset_to_out
 from app.schemas import AssetOut, SearchResults
 from app.search import search_assets
@@ -17,18 +15,12 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 QueryEmbedder = Callable[[str], Awaitable[list[float]]]
 
-_pool = None
-
 
 async def get_query_embedder() -> QueryEmbedder:
     """Embed query text by delegating to the worker (which holds the model)."""
 
     async def embed(query: str) -> list[float]:
-        global _pool
-        if _pool is None:
-            _pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-        job = await _pool.enqueue_job("embed_text_job", query)
-        result = await job.result(timeout=30)
+        result = await get_job_queue().enqueue_and_wait("embed_text_job", query)
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
