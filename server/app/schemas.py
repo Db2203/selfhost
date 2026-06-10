@@ -75,3 +75,8 @@ class PersonRename(BaseModel):
 
 class PersonMerge(BaseModel):
     other_id: uuid.UUID
+
+
+class UploadResult(BaseModel):
+    id: uuid.UUID
+    duplicate: bool

@@ -87,6 +87,9 @@ class Asset(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     # Path relative to the storage root, so moving the library is config, not a migration.
     storage_path: Mapped[str] = mapped_column(String(1024))
+    # Which backend holds the original: "library" (read-only photo folder)
+    # or "uploads" (read-write media storage, e.g. phone backups).
+    store: Mapped[str] = mapped_column(String(16), default="library", server_default="library")
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     media_type: Mapped[str] = mapped_column(String(32))  # "image" | "video"
     size_bytes: Mapped[int] = mapped_column(BigInteger)
