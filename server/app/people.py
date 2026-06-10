@@ -28,6 +28,8 @@ class ClusterReport:
 
 def _centroid(embeddings: list[list[float]]) -> list[float]:
     n = len(embeddings)
+    if n == 0:
+        raise ValueError("cannot compute a centroid of zero embeddings")
     summed = [sum(vals) / n for vals in zip(*embeddings, strict=True)]
     return normalize(summed)
 
@@ -44,10 +46,14 @@ async def cluster_faces(
         select(Face).join(Asset, Face.asset_id == Asset.id).where(Asset.owner_id == owner_id)
     )
 
+    # Order is fixed (created_at, id) so greedy clustering is deterministic:
+    # the same set of faces always seeds and groups identically across runs.
     unassigned = list(
         (
             await session.execute(
-                owned_faces.where(Face.person_id.is_(None), Face.embedding.is_not(None))
+                owned_faces.where(
+                    Face.person_id.is_(None), Face.embedding.is_not(None)
+                ).order_by(Face.created_at, Face.id)
             )
         ).scalars()
     )
