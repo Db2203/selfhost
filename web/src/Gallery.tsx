@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { fetchAssets, fileUrl, searchAssets, type Asset } from "./api";
 
-function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+export function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);

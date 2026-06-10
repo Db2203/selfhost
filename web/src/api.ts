@@ -134,6 +134,43 @@ export async function searchAssets(query: string): Promise<SearchResults> {
   return response.json();
 }
 
+export interface Person {
+  id: string;
+  name: string | null;
+  face_count: number;
+  cover: string | null;
+}
+
+export async function fetchPeople(): Promise<Person[]> {
+  const response = await apiFetch("/people");
+  if (!response.ok) throw new Error("Failed to load people");
+  return response.json();
+}
+
+export async function renamePerson(id: string, name: string): Promise<void> {
+  const response = await apiFetch(`/people/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw new Error("Rename failed");
+}
+
+export async function mergePeople(targetId: string, otherId: string): Promise<void> {
+  const response = await apiFetch(`/people/${targetId}/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ other_id: otherId }),
+  });
+  if (!response.ok) throw new Error("Merge failed");
+}
+
+export async function fetchPersonAssets(id: string): Promise<Asset[]> {
+  const response = await apiFetch(`/people/${id}/assets`);
+  if (!response.ok) throw new Error("Failed to load person's photos");
+  return response.json();
+}
+
 export async function fetchDevices(): Promise<Device[]> {
   const response = await apiFetch("/devices");
   if (!response.ok) throw new Error("Failed to load devices");

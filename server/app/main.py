@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.config import get_settings
-from app.routers import assets, auth, devices, search
+from app.routers import assets, auth, devices, people, search
 
 
 def create_app() -> FastAPI:
@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(devices.router)
     app.include_router(assets.router)
     app.include_router(search.router)
+    app.include_router(people.router)
 
     @app.get("/health")
     async def health() -> dict:

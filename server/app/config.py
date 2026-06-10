@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     signed_url_ttl_minutes: int = 60
 
+    # Face clustering: cosine similarity needed to call two faces the same
+    # person, and the minimum cluster size that becomes a Person.
+    face_match_threshold: float = 0.45
+    face_cluster_min_size: int = 2
+
 
 @lru_cache
 def get_settings() -> Settings:

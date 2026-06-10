@@ -3,8 +3,9 @@ import { isLoggedIn, logout } from "./api";
 import Devices from "./Devices";
 import Gallery from "./Gallery";
 import Login from "./Login";
+import People from "./People";
 
-type View = "gallery" | "devices";
+type View = "gallery" | "people" | "devices";
 
 export default function App() {
   const [authed, setAuthed] = useState(isLoggedIn());
@@ -24,6 +25,12 @@ export default function App() {
             Photos
           </button>
           <button
+            className={view === "people" ? "active" : ""}
+            onClick={() => setView("people")}
+          >
+            People
+          </button>
+          <button
             className={view === "devices" ? "active" : ""}
             onClick={() => setView("devices")}
           >
@@ -39,7 +46,11 @@ export default function App() {
           </button>
         </nav>
       </header>
-      <main>{view === "gallery" ? <Gallery /> : <Devices />}</main>
+      <main>
+        {view === "gallery" && <Gallery />}
+        {view === "people" && <People />}
+        {view === "devices" && <Devices />}
+      </main>
     </>
   );
 }
