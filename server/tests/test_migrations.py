@@ -9,8 +9,11 @@ from alembic.config import Config
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
+
+TABLES = {"users", "devices", "assets", "thumbnails"}
 
 
 @pytest.fixture
@@ -27,30 +30,36 @@ def alembic_config(db_url):
     return config
 
 
-def _table_names(engine) -> set[str]:
+def run_with_engine(db_url, fn):
+    """Create an engine, run fn(engine), and dispose — all inside ONE event
+    loop. asyncpg binds connections to the loop that created them, so an
+    engine must never outlive an asyncio.run() call."""
+
     async def go():
-        async with engine.connect() as conn:
-            return await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
+        engine = create_async_engine(db_url, poolclass=NullPool)
+        try:
+            return await fn(engine)
+        finally:
+            await engine.dispose()
 
     return asyncio.run(go())
 
 
+async def _table_names(engine) -> set[str]:
+    async with engine.connect() as conn:
+        return await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
+
+
 def test_upgrade_creates_schema_and_downgrade_removes_it(alembic_config, db_url):
     command.upgrade(alembic_config, "head")
-    engine = create_async_engine(db_url)
-    try:
-        tables = _table_names(engine)
-        assert {"users", "devices", "assets", "thumbnails"} <= tables
+    assert TABLES <= run_with_engine(db_url, _table_names)
 
-        command.downgrade(alembic_config, "base")
-        assert not ({"users", "devices", "assets", "thumbnails"} & _table_names(engine))
-    finally:
-        asyncio.run(engine.dispose())
+    command.downgrade(alembic_config, "base")
+    assert not (TABLES & run_with_engine(db_url, _table_names))
 
 
 def test_duplicate_asset_hash_per_owner_is_rejected(alembic_config, db_url):
     command.upgrade(alembic_config, "head")
-    engine = create_async_engine(db_url)
 
     def make_id():
         return str(uuid.uuid4()) if "sqlite" in db_url else uuid.uuid4()
@@ -61,7 +70,7 @@ def test_duplicate_asset_hash_per_owner_is_rejected(alembic_config, db_url):
         " VALUES (:id, :owner, :path, :hash, 'image', 1)"
     )
 
-    async def go():
+    async def go(engine):
         owner = make_id()
         async with engine.begin() as conn:
             await conn.execute(
@@ -91,7 +100,6 @@ def test_duplicate_asset_hash_per_owner_is_rejected(alembic_config, db_url):
                 )
 
     try:
-        asyncio.run(go())
+        run_with_engine(db_url, go)
     finally:
-        asyncio.run(engine.dispose())
         command.downgrade(alembic_config, "base")
