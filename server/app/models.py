@@ -5,6 +5,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -96,9 +97,50 @@ class Asset(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector, nullable=True)
+    # Set once face detection has run (distinguishes "not scanned" from "no faces").
+    faces_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     owner: Mapped[User] = relationship(back_populates="assets")
     thumbnails: Mapped[list["Thumbnail"]] = relationship(back_populates="asset")
+    faces: Mapped[list["Face"]] = relationship(back_populates="asset")
+
+
+class Person(Base):
+    """A cluster of similar faces; named by the user."""
+
+    __tablename__ = "people"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    faces: Mapped[list["Face"]] = relationship(back_populates="person")
+
+
+class Face(Base):
+    __tablename__ = "faces"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("people.id", ondelete="SET NULL")
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector, nullable=True)
+    # Bounding box in source-image pixels.
+    bbox_x: Mapped[int] = mapped_column(Integer)
+    bbox_y: Mapped[int] = mapped_column(Integer)
+    bbox_w: Mapped[int] = mapped_column(Integer)
+    bbox_h: Mapped[int] = mapped_column(Integer)
+    score: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    asset: Mapped[Asset] = relationship(back_populates="faces")
+    person: Mapped[Person | None] = relationship(back_populates="faces")
 
 
 class Thumbnail(Base):
