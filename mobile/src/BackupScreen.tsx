@@ -17,17 +17,28 @@ async function saveUploaded(ids: Set<string>): Promise<void> {
   await AsyncStorage.setItem(UPLOADED_KEY, JSON.stringify([...ids]));
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic", // iPhone default format; the server handles it
+  heif: "image/heif",
+};
+
 async function uploadPhoto(asset: MediaLibrary.Asset): Promise<void> {
   const info = await MediaLibrary.getAssetInfoAsync(asset);
   const uri = info.localUri ?? asset.uri;
   const name = asset.filename || `${asset.id}.jpg`;
+  const ext = name.split(".").pop()?.toLowerCase() ?? "jpg";
 
   const form = new FormData();
   // React Native's FormData accepts {uri, name, type} file descriptors.
   form.append("file", {
     uri,
     name,
-    type: "image/jpeg",
+    type: MIME_BY_EXT[ext] ?? "image/jpeg",
   } as unknown as Blob);
 
   const response = await fetch(`${serverUrl()}/api/assets/upload`, {
