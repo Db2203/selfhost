@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     face_match_threshold: float = 0.45
     face_cluster_min_size: int = 2
 
+    # Login attempts allowed per username+IP within the window.
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 300
+
 
 @lru_cache
 def get_settings() -> Settings:
