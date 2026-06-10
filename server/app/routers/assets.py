@@ -122,11 +122,15 @@ async def upload_asset(
     session.add(asset)
     await session.commit()
 
-    # Backlog jobs are idempotent; fixed ids coalesce repeats during a batch.
-    await queue.enqueue("thumbnail_backlog_job", job_id="thumbs-backlog")
-    await queue.enqueue("embed_backlog_job", job_id="embed-backlog")
-    await queue.enqueue("detect_faces_job", job_id="faces-backlog")
-    await queue.enqueue("cluster_faces_job", str(auth.user.id), job_id="cluster-backlog")
+    # Kick the (idempotent, backlog-style) processing jobs. We deliberately do
+    # NOT pass a fixed job id: arq dedups a fixed id against both queued AND
+    # completed-result keys, so a fixed id would silently drop the enqueue once
+    # an earlier backlog job's result is still cached — leaving this upload
+    # unprocessed. Redundant runs are cheap (they no-op when nothing is due).
+    await queue.enqueue("thumbnail_backlog_job")
+    await queue.enqueue("embed_backlog_job")
+    await queue.enqueue("detect_faces_job")
+    await queue.enqueue("cluster_faces_job", str(auth.user.id))
 
     return UploadResult(id=asset.id, duplicate=False)
 

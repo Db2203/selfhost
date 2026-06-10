@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -85,23 +85,31 @@ async def login(
 async def refresh(
     body: RefreshRequest, session: Annotated[AsyncSession, Depends(get_session)]
 ) -> TokenPair:
-    result = await session.execute(select(Device).where(Device.id == body.device_id))
-    device = result.scalar_one_or_none()
-    if (
-        device is None
-        or device.revoked_at is not None
-        or device.refresh_token_hash is None
-        or device.refresh_token_hash != hash_refresh_token(body.refresh_token)
-    ):
-        raise _bad_credentials
-
-    # Rotate: each refresh token is single-use, so a stolen old token is dead.
+    presented_hash = hash_refresh_token(body.refresh_token)
     next_token = new_refresh_token()
-    device.refresh_token_hash = hash_refresh_token(next_token)
+
+    # Rotate atomically: the UPDATE only succeeds if the presented token is
+    # still the current one. Two concurrent refreshes with the same token race
+    # on this single row write — exactly one updates a row, the other matches
+    # nothing and is rejected. (A plain read-check-write would let both win.)
+    result = await session.execute(
+        update(Device)
+        .where(
+            Device.id == body.device_id,
+            Device.revoked_at.is_(None),
+            Device.refresh_token_hash == presented_hash,
+        )
+        .values(refresh_token_hash=hash_refresh_token(next_token))
+        .returning(Device.user_id)
+    )
+    row = result.first()
+    if row is None:
+        await session.rollback()
+        raise _bad_credentials
     await session.commit()
 
     return TokenPair(
-        access_token=create_access_token(device.user_id, device.id),
+        access_token=create_access_token(row.user_id, body.device_id),
         refresh_token=next_token,
-        device_id=device.id,
+        device_id=body.device_id,
     )
