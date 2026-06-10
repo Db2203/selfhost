@@ -36,6 +36,7 @@ services:
     volumes:
       - storage-data:/srv/storage
       - ${LIBRARY_DIR:-./sample-library}:/srv/library:ro
+      - ml-cache:/home/appuser/.cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,3 +75,4 @@ volumes:
   postgres-data:
   redis-data:
   storage-data:
+  ml-cache:

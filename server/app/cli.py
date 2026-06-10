@@ -40,14 +40,16 @@ async def _enqueue_index(username: str) -> str:
         report = await job.result(timeout=3600)
         thumbs_job = await pool.enqueue_job("thumbnail_backlog_job")
         thumbs = await thumbs_job.result(timeout=3600)
+        embed_job = await pool.enqueue_job("embed_backlog_job")
+        embeds = await embed_job.result(timeout=7200)  # first run downloads CLIP
     finally:
         await pool.close()
-    errors = report["errors"] + thumbs["errors"]
+    errors = report["errors"] + thumbs["errors"] + embeds["errors"]
     return (
         f"scanned={report['scanned']} added={report['added']}"
         f" duplicates={report['skipped_duplicates']}"
-        f" thumbnails={thumbs['generated']} errors={len(errors)}"
-        + ("".join(f"\n  ! {e}" for e in errors))
+        f" thumbnails={thumbs['generated']} embedded={embeds['embedded']}"
+        f" errors={len(errors)}" + ("".join(f"\n  ! {e}" for e in errors))
     )
 
 
