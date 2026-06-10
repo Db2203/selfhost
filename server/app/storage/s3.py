@@ -67,8 +67,10 @@ class S3Storage(Storage):
     async def stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
         async with self._client() as client:
             response = await client.get_object(Bucket=self.bucket, Key=self._key(path))
+            # The body is an aiohttp response; size-bounded reads go through
+            # its content StreamReader (plain .read() takes no size here).
             async with response["Body"] as body:
-                while chunk := await body.read(chunk_size):
+                async for chunk in body.content.iter_chunked(chunk_size):
                     yield chunk
 
     async def list_files(self, prefix: str = "") -> AsyncIterator[str]:
