@@ -1,0 +1,17 @@
+# Local/LAN deployment: Caddy terminates TLS with an internally-signed cert.
+# For a public hostname, replace `localhost` with the domain and Caddy will
+# fetch real certificates automatically.
+localhost {
+	tls internal
+
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	reverse_proxy api:8000
+}
