@@ -123,6 +123,17 @@ export async function fetchAssets(offset: number, limit = 100): Promise<AssetPag
   return response.json();
 }
 
+export interface SearchResults {
+  query: string;
+  items: Asset[];
+}
+
+export async function searchAssets(query: string): Promise<SearchResults> {
+  const response = await apiFetch(`/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) throw new Error("Search failed");
+  return response.json();
+}
+
 export async function fetchDevices(): Promise<Device[]> {
   const response = await apiFetch("/devices");
   if (!response.ok) throw new Error("Failed to load devices");
