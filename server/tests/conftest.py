@@ -13,6 +13,8 @@ from sqlalchemy.pool import NullPool
 from app.db import get_session
 from app.main import create_app
 from app.models import User
+from app.ratelimit import InMemoryRateLimiter
+from app.routers.auth import get_rate_limiter
 from app.security import hash_password
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
@@ -45,6 +47,9 @@ def client(migrated_db):
 
     app = create_app()
     app.dependency_overrides[get_session] = override_session
+    # Permissive limiter so login-heavy tests don't trip it; the rate-limit
+    # tests install a strict one themselves.
+    app.dependency_overrides[get_rate_limiter] = lambda: InMemoryRateLimiter(10_000, 60)
     app.state.test_engine = engine
 
     with TestClient(app) as test_client:

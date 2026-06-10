@@ -1,11 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db import get_session
 from app.models import Device, User
+from app.ratelimit import RateLimiter, RedisRateLimiter
 from app.schemas import LoginRequest, RefreshRequest, TokenPair
 from app.security import (
     create_access_token,
@@ -24,11 +26,35 @@ _bad_credentials = HTTPException(
 # An argon2 hash of a throwaway value; see login() below.
 _DUMMY_HASH = hash_password("not-a-real-password")
 
+_limiter: RateLimiter | None = None
+
+
+def get_rate_limiter() -> RateLimiter:
+    global _limiter
+    if _limiter is None:
+        settings = get_settings()
+        _limiter = RedisRateLimiter(
+            settings.redis_url,
+            max_attempts=settings.login_rate_limit_attempts,
+            window_seconds=settings.login_rate_limit_window_seconds,
+        )
+    return _limiter
+
 
 @router.post("/login", response_model=TokenPair)
 async def login(
-    body: LoginRequest, session: Annotated[AsyncSession, Depends(get_session)]
+    body: LoginRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> TokenPair:
+    client_ip = request.client.host if request.client else "unknown"
+    if not await limiter.allow(f"login:{body.username.lower()}:{client_ip}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts; try again later",
+        )
+
     result = await session.execute(select(User).where(User.username == body.username))
     user = result.scalar_one_or_none()
     # Verify against a dummy hash when the user is unknown, so the response
