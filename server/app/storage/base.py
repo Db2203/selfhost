@@ -31,3 +31,8 @@ class Storage(ABC):
 
     @abstractmethod
     def stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]: ...
+
+    @abstractmethod
+    def list_files(self, prefix: str = "") -> AsyncIterator[str]:
+        """Yield relative paths of all files under prefix (recursively)."""
+        ...

@@ -50,3 +50,18 @@ class LocalFilesystemStorage(Storage):
                 yield chunk
         finally:
             await asyncio.to_thread(file.close)
+
+    async def list_files(self, prefix: str = "") -> AsyncIterator[str]:
+        base = self._resolve(prefix) if prefix else self.root
+
+        def _walk() -> list[str]:
+            if not base.is_dir():
+                return []
+            return sorted(
+                str(p.relative_to(self.root))
+                for p in base.rglob("*")
+                if p.is_file()
+            )
+
+        for rel_path in await asyncio.to_thread(_walk):
+            yield rel_path
