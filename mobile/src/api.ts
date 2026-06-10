@@ -93,7 +93,7 @@ export async function login(
   await storeTokens(await response.json());
 }
 
-async function tryRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<boolean> {
   if (!cache.refresh || !cache.device || !cache.server) return false;
   const response = await fetch(`${cache.server}/api/auth/refresh`, {
     method: "POST",
@@ -105,6 +105,19 @@ async function tryRefresh(): Promise<boolean> {
   return true;
 }
 
+// Single-use refresh tokens: coalesce concurrent refreshes so simultaneous
+// 401s don't invalidate each other's rotated token.
+let refreshInFlight: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const go = () =>
     fetch(`${cache.server}/api${path}`, {
@@ -114,6 +127,11 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
   let response = await go();
   if (response.status === 401 && (await tryRefresh())) response = await go();
+  if (response.status === 401) {
+    // Refresh failed or the retry still 401'd: drop the dead session so the
+    // app returns to the login screen instead of looping on stale tokens.
+    await logout();
+  }
   return response;
 }
 

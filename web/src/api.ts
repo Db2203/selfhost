@@ -82,7 +82,7 @@ export async function login(
   store.set(await response.json());
 }
 
-async function tryRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<boolean> {
   if (!store.refresh || !store.deviceId) return false;
   const response = await fetch(`${API}/auth/refresh`, {
     method: "POST",
@@ -95,6 +95,20 @@ async function tryRefresh(): Promise<boolean> {
   if (!response.ok) return false;
   store.set(await response.json());
   return true;
+}
+
+// Refresh tokens are single-use (rotated server-side). If several requests
+// 401 at once they must NOT each refresh — the first would invalidate the
+// token the others present. Coalesce concurrent refreshes onto one promise.
+let refreshInFlight: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 export async function apiFetch(
