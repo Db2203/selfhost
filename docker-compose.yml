@@ -17,6 +17,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - storage-data:/srv/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,6 +31,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - storage-data:/srv/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,3 +70,4 @@ volumes:
   caddy-config:
   postgres-data:
   redis-data:
+  storage-data:
