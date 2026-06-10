@@ -75,16 +75,22 @@ mobile/   React Native app (added later)
 ## Quick start
 
 ```bash
-cp .env.example .env        # then edit the placeholder secrets
+cp .env.example .env        # set LIBRARY_DIR to your photo folder + real secrets
 docker compose up -d --build
 docker compose exec api alembic upgrade head          # apply db migrations
 docker compose exec api python -m app.cli create-user <name>   # create your account
-curl -k https://localhost/health
+docker compose exec api python -m app.cli index <name>         # scan + thumbnail
 ```
 
+Then open **https://localhost** (LAN: `https://<laptop-ip>`), accept the
+locally-signed certificate, and log in. The API is served under `/api`
+(health check: `curl -k https://localhost/api/health`).
+
 There is deliberately no public signup — accounts are created on the server.
-All other endpoints require a Bearer token from `POST /auth/login`; each login
-registers a named device that can be listed and revoked via `/devices`.
+All API endpoints require a Bearer token from `POST /auth/login`; each login
+registers a named device that can be listed and revoked in the Devices page.
+Image bytes are fetched with short-lived HMAC-signed URLs, your photo folder
+is mounted read-only, and originals are never copied or modified.
 
 Caddy serves HTTPS on `https://localhost` with a locally-signed certificate
 (`-k` skips the trust check; install Caddy's root CA to remove the warning).

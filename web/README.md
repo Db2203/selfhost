@@ -1,6 +1,21 @@
 # web
 
-React + Vite + TypeScript web client for PhotoNest: login, the photo timeline gallery,
-lightbox, search, and device management.
+React + Vite + TypeScript client for PhotoNest: login, infinite-scroll photo
+timeline, lightbox, and device management.
 
-_Placeholder — code lands after the backend asset API exists._
+In production the app is built into the Caddy image (`caddy/Dockerfile`) and
+served at `https://localhost`, with the API under `/api`.
+
+## Develop
+
+```bash
+npm install
+npm run dev      # proxies /api to the compose stack (https://localhost)
+```
+
+## Check & build
+
+```bash
+npm run lint
+npm run build
+```

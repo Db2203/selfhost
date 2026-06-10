@@ -1,0 +1,195 @@
+:root {
+  color-scheme: dark;
+  --bg: #101216;
+  --surface: #1a1d23;
+  --border: #2a2e36;
+  --text: #e8eaed;
+  --muted: #9aa0a6;
+  --accent: #8ab4f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---- header ---- */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+nav {
+  display: flex;
+  gap: 8px;
+}
+
+main {
+  padding: 12px;
+}
+
+/* ---- login ---- */
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(340px, 90vw);
+  padding: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.login-card p {
+  margin: 0 0 8px;
+}
+
+.login-card input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font: inherit;
+}
+
+.error {
+  color: #f28b82;
+  font-size: 0.9rem;
+}
+
+/* ---- gallery ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 4px;
+}
+
+.grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--surface);
+}
+
+.sentinel {
+  height: 1px;
+}
+
+.empty {
+  text-align: center;
+  margin-top: 18vh;
+}
+
+code {
+  background: var(--surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ---- lightbox ---- */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.lightbox img {
+  max-width: 96vw;
+  max-height: 86vh;
+  object-fit: contain;
+}
+
+.lightbox-meta {
+  display: flex;
+  gap: 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lightbox-meta a {
+  color: var(--accent);
+}
+
+/* ---- devices ---- */
+.devices {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.devices table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.devices th,
+.devices td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.devices tr.revoked td {
+  opacity: 0.5;
+}
