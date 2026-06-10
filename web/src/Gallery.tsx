@@ -53,18 +53,29 @@ export default function Gallery() {
     }
   }
 
+  // Refs (not state) drive pagination so loadMore has a stable identity and
+  // the IntersectionObserver isn't torn down/recreated on every page — which
+  // would otherwise risk duplicate fetches of the same offset.
+  const countRef = useRef(0);
+  const totalRef = useRef<number | null>(null);
+
   const loadMore = useCallback(async () => {
     if (loading.current) return;
-    if (total !== null && assets.length >= total) return;
+    if (totalRef.current !== null && countRef.current >= totalRef.current) return;
     loading.current = true;
     try {
-      const page = await fetchAssets(assets.length);
-      setAssets((prev) => [...prev, ...page.items]);
+      const page = await fetchAssets(countRef.current);
+      setAssets((prev) => {
+        const next = [...prev, ...page.items];
+        countRef.current = next.length;
+        return next;
+      });
+      totalRef.current = page.total;
       setTotal(page.total);
     } finally {
       loading.current = false;
     }
-  }, [assets.length, total]);
+  }, []);
 
   useEffect(() => {
     const node = sentinel.current;
