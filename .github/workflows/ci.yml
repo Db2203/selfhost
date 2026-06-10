@@ -44,6 +44,22 @@ jobs:
       - name: Test
         run: pytest -q
 
+  mobile:
+    name: Mobile (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+
   web:
     name: Web (lint + build)
     runs-on: ubuntu-latest
