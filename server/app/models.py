@@ -2,16 +2,41 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     DateTime,
     ForeignKey,
     Integer,
     String,
+    TypeDecorator,
     UniqueConstraint,
     Uuid,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+EMBEDDING_DIM = 512  # CLIP ViT-B/32
+
+
+class EmbeddingVector(TypeDecorator):
+    """pgvector on Postgres; JSON on SQLite (used only by local tests)."""
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from pgvector.sqlalchemy import Vector
+
+            return dialect.type_descriptor(Vector(EMBEDDING_DIM))
+        # none_as_null: a missing embedding must be SQL NULL (so the backlog
+        # query's IS NULL matches), not the JSON string 'null'.
+        return dialect.type_descriptor(JSON(none_as_null=True))
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return [float(x) for x in value]
 
 
 class Base(DeclarativeBase):
@@ -70,6 +95,7 @@ class Asset(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector, nullable=True)
 
     owner: Mapped[User] = relationship(back_populates="assets")
     thumbnails: Mapped[list["Thumbnail"]] = relationship(back_populates="asset")
