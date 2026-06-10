@@ -12,12 +12,19 @@ __all__ = [
 
 
 def get_media_storage() -> Storage:
-    """Read-write storage for derived/uploaded files (thumbnails, uploads).
+    """Read-write storage for derived/uploaded files (thumbnails, uploads)."""
+    settings = get_settings()
+    if settings.storage_backend == "s3":
+        from app.storage.s3 import S3Storage
 
-    Only the local filesystem exists today; an S3/MinIO backend slots in here
-    later without touching any caller.
-    """
-    return LocalFilesystemStorage(get_settings().storage_root)
+        return S3Storage(
+            bucket=settings.s3_bucket,
+            endpoint_url=settings.s3_endpoint,
+            access_key=settings.s3_access_key,
+            secret_key=settings.s3_secret_key,
+            region=settings.s3_region,
+        )
+    return LocalFilesystemStorage(settings.storage_root)
 
 
 def get_library_storage() -> Storage:

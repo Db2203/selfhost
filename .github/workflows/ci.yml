@@ -27,8 +27,21 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+      TEST_S3_ENDPOINT: http://localhost:9000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

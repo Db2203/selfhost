@@ -78,7 +78,40 @@ def main(argv: list[str] | None = None) -> int:
     index = sub.add_parser("index", help="scan the photo library for a user")
     index.add_argument("username")
 
+    sub.add_parser(
+        "copy-storage",
+        help="copy every object from local media storage to the configured S3 bucket",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.command == "copy-storage":
+
+        async def go_copy() -> str:
+            from app.config import get_settings
+            from app.storage import LocalFilesystemStorage
+            from app.storage.s3 import S3Storage
+
+            settings = get_settings()
+            source = LocalFilesystemStorage(settings.storage_root)
+            dest = S3Storage(
+                bucket=settings.s3_bucket,
+                endpoint_url=settings.s3_endpoint,
+                access_key=settings.s3_access_key,
+                secret_key=settings.s3_secret_key,
+                region=settings.s3_region,
+            )
+            copied = skipped = 0
+            async for path in source.list_files():
+                if await dest.exists(path):
+                    skipped += 1
+                    continue
+                await dest.write(path, await source.read(path))
+                copied += 1
+            return f"copied={copied} skipped={skipped} (set STORAGE_BACKEND=s3 to switch over)"
+
+        print(asyncio.run(go_copy()))
+        return 0
 
     if args.command == "index":
 
