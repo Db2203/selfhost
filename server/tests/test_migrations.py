@@ -52,9 +52,18 @@ def test_duplicate_asset_hash_per_owner_is_rejected(alembic_config, db_url):
     command.upgrade(alembic_config, "head")
     engine = create_async_engine(db_url)
 
+    def make_id():
+        return str(uuid.uuid4()) if "sqlite" in db_url else uuid.uuid4()
+
+    insert_asset = text(
+        "INSERT INTO assets"
+        " (id, owner_id, storage_path, content_hash, media_type, size_bytes)"
+        " VALUES (:id, :owner, :path, :hash, 'image', 1)"
+    )
+
     async def go():
+        owner = make_id()
         async with engine.begin() as conn:
-            owner = str(uuid.uuid4()) if "sqlite" in db_url else uuid.uuid4()
             await conn.execute(
                 text(
                     "INSERT INTO users (id, username, password_hash)"
@@ -62,26 +71,19 @@ def test_duplicate_asset_hash_per_owner_is_rejected(alembic_config, db_url):
                 ),
                 {"id": owner, "username": f"u-{owner}"[:60]},
             )
-
-            insert_asset = text(
-                "INSERT INTO assets"
-                " (id, owner_id, storage_path, content_hash, media_type, size_bytes)"
-                " VALUES (:id, :owner, :path, :hash, 'image', 1)"
-            )
             await conn.execute(
                 insert_asset,
-                {
-                    "id": str(uuid.uuid4()) if "sqlite" in db_url else uuid.uuid4(),
-                    "owner": owner,
-                    "path": "a/one.jpg",
-                    "hash": "same-hash",
-                },
+                {"id": make_id(), "owner": owner, "path": "a/one.jpg", "hash": "same-hash"},
             )
-            with pytest.raises(IntegrityError):
+
+        # Postgres aborts the whole transaction on a constraint violation, so
+        # the duplicate insert gets its own transaction (rolled back on error).
+        with pytest.raises(IntegrityError):
+            async with engine.begin() as conn:
                 await conn.execute(
                     insert_asset,
                     {
-                        "id": str(uuid.uuid4()) if "sqlite" in db_url else uuid.uuid4(),
+                        "id": make_id(),
                         "owner": owner,
                         "path": "b/copy-of-one.jpg",
                         "hash": "same-hash",
