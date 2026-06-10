@@ -21,8 +21,8 @@ and "show me photos of the beach" search.
 - [x] Natural-language search (CLIP embeddings + vector search)
 - [x] Face recognition & people grouping
 - [x] Android app with camera-roll backup
-- [ ] iOS app
-- [ ] Scale-out storage (S3/MinIO) and remote access
+- [x] iOS app (same Expo app; runs via Expo Go, native build needs a Mac)
+- [x] Scale-out storage (S3/MinIO) and remote access (Tailscale)
 
 ## Architecture
 
@@ -85,6 +85,9 @@ docker compose exec api python -m app.cli index <name>         # scan + thumbnai
 Then open **https://localhost** (LAN: `https://<laptop-ip>`), accept the
 locally-signed certificate, and log in. The API is served under `/api`
 (health check: `curl -k https://localhost/api/health`).
+
+For access from outside your home network, see
+[docs/remote-access.md](./docs/remote-access.md) (Tailscale — no open ports).
 
 There is deliberately no public signup — accounts are created on the server.
 All API endpoints require a Bearer token from `POST /auth/login`; each login
