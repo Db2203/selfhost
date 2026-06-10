@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY alembic.ini .
+COPY migrations ./migrations
 
 # Run as a non-root user; the API writes no local files (stateless tier).
 RUN useradd --create-home appuser

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.config import get_settings
+from app.routers import auth, devices
 
 
 def create_app() -> FastAPI:
@@ -13,6 +14,9 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.environment == "development" else None,
         redoc_url=None,
     )
+
+    app.include_router(auth.router)
+    app.include_router(devices.router)
 
     @app.get("/health")
     async def health() -> dict:

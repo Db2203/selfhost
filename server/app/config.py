@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Must be overridden in production; the default is only usable in dev.
     secret_key: str = "dev-only-change-me"
 
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:
