@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
+    signed_url_ttl_minutes: int = 60
 
 
 @lru_cache
