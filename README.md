@@ -15,10 +15,10 @@ and "show me photos of the beach" search.
 
 ## Features (roadmap)
 
-- [ ] Secure, authenticated access — per-device login, nothing served to anonymous clients
-- [ ] Index a local photo folder (EXIF, dates, dedup)
-- [ ] Fast web gallery (timeline, lightbox)
-- [ ] Natural-language search (CLIP embeddings + vector search)
+- [x] Secure, authenticated access — per-device login, nothing served to anonymous clients
+- [x] Index a local photo folder (EXIF, dates, dedup)
+- [x] Fast web gallery (timeline, lightbox)
+- [x] Natural-language search (CLIP embeddings + vector search)
 - [ ] Face recognition & people grouping
 - [ ] Android app with camera-roll auto-backup
 - [ ] iOS app
