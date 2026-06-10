@@ -3,7 +3,8 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py312"
+# Lint for the lowest Python we run on (local dev is 3.10; containers are 3.12).
+target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
