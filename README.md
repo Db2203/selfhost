@@ -72,6 +72,17 @@ web/      React web client
 mobile/   React Native app (added later)
 ```
 
+## Quick start
+
+```bash
+cp .env.example .env        # then edit the placeholder secrets
+docker compose up -d --build
+curl -k https://localhost/health
+```
+
+Caddy serves HTTPS on `https://localhost` with a locally-signed certificate
+(`-k` skips the trust check; install Caddy's root CA to remove the warning).
+
 ## Status
 
 Early development. See the roadmap above; releases are tagged per milestone.
