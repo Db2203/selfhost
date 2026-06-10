@@ -1,6 +1,9 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET = "dev-only-change-me"
 
 
 class Settings(BaseSettings):
@@ -25,8 +28,8 @@ class Settings(BaseSettings):
     # here but never modifies or copies them.
     library_root: str = "/srv/library"
 
-    # Must be overridden in production; the default is only usable in dev.
-    secret_key: str = "dev-only-change-me"
+    # Must be overridden outside development; the default is only usable in dev.
+    secret_key: str = DEFAULT_SECRET
 
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
@@ -40,6 +43,18 @@ class Settings(BaseSettings):
     # Login attempts allowed per username+IP within the window.
     login_rate_limit_attempts: int = 5
     login_rate_limit_window_seconds: int = 300
+
+    @model_validator(mode="after")
+    def _reject_default_secret_outside_dev(self) -> "Settings":
+        # A predictable signing key lets anyone forge JWTs and image URLs.
+        # Allowed only in development; anything else must set SECRET_KEY.
+        if self.environment != "development" and self.secret_key == DEFAULT_SECRET:
+            raise ValueError(
+                "SECRET_KEY must be set (not the default) when ENVIRONMENT is "
+                "not 'development'. Generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return self
 
 
 @lru_cache

@@ -11,16 +11,30 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   api:
     build: ./server
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Only the API runs migrations on startup (see entrypoint.sh).
+      RUN_MIGRATIONS: "1"
+      HF_HOME: /home/appuser/.cache/huggingface
+      TORCH_HOME: /home/appuser/.cache/torch
     volumes:
       - storage-data:/srv/storage
+      - ml-cache:/home/appuser/.cache
       - ${LIBRARY_DIR:-./sample-library}:/srv/library:ro
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,10 +47,13 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      HF_HOME: /home/appuser/.cache/huggingface
+      TORCH_HOME: /home/appuser/.cache/torch
     volumes:
       - storage-data:/srv/storage
-      - ${LIBRARY_DIR:-./sample-library}:/srv/library:ro
       - ml-cache:/home/appuser/.cache
+      - ${LIBRARY_DIR:-./sample-library}:/srv/library:ro
     depends_on:
       postgres:
         condition: service_healthy
