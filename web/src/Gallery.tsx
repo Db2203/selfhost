@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchAssets, fileUrl, type Asset } from "./api";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { fetchAssets, fileUrl, searchAssets, type Asset } from "./api";
 
 function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
   useEffect(() => {
@@ -33,8 +33,25 @@ export default function Gallery() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [selected, setSelected] = useState<Asset | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Asset[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const loading = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
+
+  async function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    if (!query.trim()) {
+      setResults(null);
+      return;
+    }
+    setSearching(true);
+    try {
+      setResults((await searchAssets(query.trim())).items);
+    } finally {
+      setSearching(false);
+    }
+  }
 
   const loadMore = useCallback(async () => {
     if (loading.current) return;
@@ -72,10 +89,39 @@ export default function Gallery() {
     );
   }
 
+  const shown = results ?? assets;
+
   return (
     <>
+      <form className="search" onSubmit={submitSearch}>
+        <input
+          placeholder='Search your photos, e.g. "sunset at the beach"'
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!e.target.value.trim()) setResults(null);
+          }}
+        />
+        <button disabled={searching}>{searching ? "…" : "Search"}</button>
+        {results && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setResults(null);
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </form>
+      {results && (
+        <p className="muted search-note">
+          Top matches for “{query.trim()}”, best first
+        </p>
+      )}
       <div className="grid">
-        {assets.map((asset) =>
+        {shown.map((asset) =>
           asset.urls.grid ? (
             <img
               key={asset.id}
@@ -87,7 +133,7 @@ export default function Gallery() {
           ) : null,
         )}
       </div>
-      <div ref={sentinel} className="sentinel" />
+      {!results && <div ref={sentinel} className="sentinel" />}
       {selected && <Lightbox asset={selected} onClose={() => setSelected(null)} />}
     </>
   );

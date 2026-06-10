@@ -20,7 +20,7 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 VARIANTS = {"grid", "preview", "original"}
 
 
-def _to_out(asset: Asset) -> AssetOut:
+def asset_to_out(asset: Asset) -> AssetOut:
     kinds = {t.kind for t in asset.thumbnails}
     return AssetOut(
         id=asset.id,
@@ -56,7 +56,7 @@ async def list_assets(
         .offset(offset)
         .limit(limit)
     )
-    items = [_to_out(a) for a in result.scalars()]
+    items = [asset_to_out(a) for a in result.scalars()]
     return AssetPage(items=items, total=total or 0, offset=offset, limit=limit)
 
 
@@ -74,7 +74,7 @@ async def get_asset(
     asset = result.scalar_one_or_none()
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
-    return _to_out(asset)
+    return asset_to_out(asset)
 
 
 @router.get("/{asset_id}/file/{variant}")

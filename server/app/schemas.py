@@ -54,3 +54,8 @@ class AssetPage(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class SearchResults(BaseModel):
+    query: str
+    items: list[AssetOut]
