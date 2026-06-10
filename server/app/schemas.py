@@ -30,3 +30,27 @@ class DeviceOut(BaseModel):
     revoked: bool
 
     model_config = {"from_attributes": False}
+
+
+class AssetUrls(BaseModel):
+    grid: str | None
+    preview: str | None
+    original: str
+
+
+class AssetOut(BaseModel):
+    id: uuid.UUID
+    media_type: str
+    width: int | None
+    height: int | None
+    size_bytes: int
+    taken_at: datetime | None
+    created_at: datetime
+    urls: AssetUrls
+
+
+class AssetPage(BaseModel):
+    items: list[AssetOut]
+    total: int
+    offset: int
+    limit: int
