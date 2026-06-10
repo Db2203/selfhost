@@ -12,9 +12,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://photonest:photonest@postgres:5432/photonest"
     redis_url: str = "redis://redis:6379/0"
 
-    # Root for originals + thumbnails; swapping to a NAS path or an S3 bucket
-    # is a config change, not a code change.
+    # Read-write root for derived/uploaded files (thumbnails, phone uploads);
+    # swapping to a NAS path or an S3 bucket is a config change, not code.
     storage_root: str = "/srv/storage"
+    # The existing photo folder, mounted read-only; the indexer records files
+    # here but never modifies or copies them.
+    library_root: str = "/srv/library"
 
     # Must be overridden in production; the default is only usable in dev.
     secret_key: str = "dev-only-change-me"

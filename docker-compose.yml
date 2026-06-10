@@ -19,6 +19,7 @@ services:
       - .env
     volumes:
       - storage-data:/srv/storage
+      - ${LIBRARY_DIR:-./sample-library}:/srv/library:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +34,7 @@ services:
       - .env
     volumes:
       - storage-data:/srv/storage
+      - ${LIBRARY_DIR:-./sample-library}:/srv/library:ro
     depends_on:
       postgres:
         condition: service_healthy

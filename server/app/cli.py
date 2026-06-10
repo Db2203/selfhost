@@ -1,6 +1,7 @@
 """Admin commands, run inside the api container:
 
     docker compose exec api python -m app.cli create-user <username>
+    docker compose exec api python -m app.cli index <username>
 
 There is intentionally no public signup endpoint — accounts on a personal
 photo server are created by whoever operates the server.
@@ -11,11 +12,39 @@ import asyncio
 import getpass
 import sys
 
+from arq import create_pool
+from arq.connections import RedisSettings
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.db import SessionFactory, engine
 from app.models import User
 from app.security import hash_password
+
+
+async def _get_user_id(username: str) -> str | None:
+    async with SessionFactory() as session:
+        result = await session.execute(select(User.id).where(User.username == username))
+        user_id = result.scalar_one_or_none()
+        return str(user_id) if user_id else None
+
+
+async def _enqueue_index(username: str) -> str:
+    user_id = await _get_user_id(username)
+    if user_id is None:
+        return f"no such user: {username!r}"
+
+    pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    try:
+        job = await pool.enqueue_job("index_library_job", user_id)
+        report = await job.result(timeout=3600)
+    finally:
+        await pool.close()
+    return (
+        f"scanned={report['scanned']} added={report['added']}"
+        f" duplicates={report['skipped_duplicates']} errors={len(report['errors'])}"
+        + ("".join(f"\n  ! {e}" for e in report["errors"]))
+    )
 
 
 async def _create_user(username: str, password: str) -> str:
@@ -35,7 +64,22 @@ def main(argv: list[str] | None = None) -> int:
     create = sub.add_parser("create-user", help="create a user account")
     create.add_argument("username")
 
+    index = sub.add_parser("index", help="scan the photo library for a user")
+    index.add_argument("username")
+
     args = parser.parse_args(argv)
+
+    if args.command == "index":
+
+        async def go_index() -> str:
+            try:
+                return await _enqueue_index(args.username)
+            finally:
+                await engine.dispose()
+
+        result = asyncio.run(go_index())
+        print(result)
+        return 1 if result.startswith("no such user") else 0
 
     if args.command == "create-user":
         password = getpass.getpass("Password: ")

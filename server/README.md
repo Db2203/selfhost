@@ -12,6 +12,7 @@ app/
   db.py       async engine + session dependency
   models.py   SQLAlchemy models (users, devices, assets, thumbnails)
   storage/    Storage interface + local-filesystem backend
+  indexer.py  library scan: hash, EXIF, dedup → asset rows
   worker.py   arq worker entrypoint (background jobs)
 migrations/   Alembic migrations (run: alembic upgrade head)
 tests/        pytest suite
