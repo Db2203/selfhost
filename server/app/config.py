@@ -12,9 +12,15 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://photonest:photonest@postgres:5432/photonest"
     redis_url: str = "redis://redis:6379/0"
 
-    # Read-write root for derived/uploaded files (thumbnails, phone uploads);
-    # swapping to a NAS path or an S3 bucket is a config change, not code.
+    # Read-write storage for derived/uploaded files (thumbnails, phone
+    # uploads): "local" filesystem or any "s3"-compatible store (MinIO, NAS).
+    storage_backend: str = "local"
     storage_root: str = "/srv/storage"
+    s3_bucket: str = ""
+    s3_endpoint: str = ""  # e.g. http://minio:9000; empty = real AWS
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_region: str = "us-east-1"
     # The existing photo folder, mounted read-only; the indexer records files
     # here but never modifies or copies them.
     library_root: str = "/srv/library"
