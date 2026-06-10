@@ -59,3 +59,19 @@ class AssetPage(BaseModel):
 class SearchResults(BaseModel):
     query: str
     items: list[AssetOut]
+
+
+class PersonOut(BaseModel):
+    id: uuid.UUID
+    name: str | None
+    face_count: int
+    # Signed grid-thumbnail URL of a photo containing this person.
+    cover: str | None
+
+
+class PersonRename(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class PersonMerge(BaseModel):
+    other_id: uuid.UUID
