@@ -19,8 +19,8 @@ and "show me photos of the beach" search.
 - [x] Index a local photo folder (EXIF, dates, dedup)
 - [x] Fast web gallery (timeline, lightbox)
 - [x] Natural-language search (CLIP embeddings + vector search)
-- [ ] Face recognition & people grouping
-- [ ] Android app with camera-roll auto-backup
+- [x] Face recognition & people grouping
+- [x] Android app with camera-roll backup
 - [ ] iOS app
 - [ ] Scale-out storage (S3/MinIO) and remote access
 
@@ -69,7 +69,7 @@ and "show me photos of the beach" search.
 ```
 server/   FastAPI backend, workers, migrations
 web/      React web client
-mobile/   React Native app (added later)
+mobile/   React Native (Expo) app — Android first
 ```
 
 ## Quick start
