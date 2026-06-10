@@ -9,7 +9,11 @@ that index photos, generate thumbnails, and compute AI embeddings.
 app/
   main.py     FastAPI app factory + /health
   config.py   environment-driven settings (pydantic-settings)
+  db.py       async engine + session dependency
+  models.py   SQLAlchemy models (users, devices, assets, thumbnails)
+  storage/    Storage interface + local-filesystem backend
   worker.py   arq worker entrypoint (background jobs)
+migrations/   Alembic migrations (run: alembic upgrade head)
 tests/        pytest suite
 ```
 
