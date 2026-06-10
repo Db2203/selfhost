@@ -38,12 +38,16 @@ async def _enqueue_index(username: str) -> str:
     try:
         job = await pool.enqueue_job("index_library_job", user_id)
         report = await job.result(timeout=3600)
+        thumbs_job = await pool.enqueue_job("thumbnail_backlog_job")
+        thumbs = await thumbs_job.result(timeout=3600)
     finally:
         await pool.close()
+    errors = report["errors"] + thumbs["errors"]
     return (
         f"scanned={report['scanned']} added={report['added']}"
-        f" duplicates={report['skipped_duplicates']} errors={len(report['errors'])}"
-        + ("".join(f"\n  ! {e}" for e in report["errors"]))
+        f" duplicates={report['skipped_duplicates']}"
+        f" thumbnails={thumbs['generated']} errors={len(errors)}"
+        + ("".join(f"\n  ! {e}" for e in errors))
     )
 
 
