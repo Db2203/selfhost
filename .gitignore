@@ -1,0 +1,51 @@
+# ---- Secrets / environment ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Python (server) ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ---- Node / web ----
+node_modules/
+web/dist/
+web/build/
+.vite/
+*.local
+
+# ---- ML model weights & caches (large binaries, downloaded at runtime) ----
+models/
+*.pt
+*.onnx
+*.bin
+.cache/
+.torch/
+.insightface/
+
+# ---- User media / photo libraries (never commit photos) ----
+media/
+data/
+uploads/
+thumbnails/
+
+# ---- Local tooling & editor scratch ----
+.claude/
+*.plan.md
+.idea/
+.vscode/
+.DS_Store
+
+# ---- Docker / runtime volumes ----
+postgres-data/
+redis-data/
