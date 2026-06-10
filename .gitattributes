@@ -1,0 +1,16 @@
+# Normalize line endings. Shell scripts and Dockerfiles run inside Linux
+# containers, so they MUST stay LF even when checked out on Windows —
+# otherwise the shebang/interpreter breaks (`/bin/sh^M: bad interpreter`).
+* text=auto eol=lf
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+Caddyfile text eol=lf
+
+# Binary assets — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
