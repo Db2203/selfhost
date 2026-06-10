@@ -13,5 +13,15 @@ localhost {
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	reverse_proxy api:8000
+	# Backend API (the /api prefix is stripped before proxying).
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Web app (SPA: unknown paths fall back to index.html).
+	handle {
+		root * /srv/www
+		try_files {path} /index.html
+		file_server
+	}
 }
