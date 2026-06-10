@@ -80,3 +80,11 @@ class WorkerSettings:
         cluster_faces_job,
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    # Backlog jobs process the whole library in one run and, on first use, also
+    # download model weights — far longer than arq's 300s default. Without this
+    # they'd be killed mid-run and retried indefinitely. Jobs are idempotent
+    # and resumable, but they should be allowed to simply finish.
+    job_timeout = 7200
+    # Keep results long enough for the CLI to collect them.
+    keep_result = 7200
+    max_tries = 3

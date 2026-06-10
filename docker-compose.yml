@@ -68,12 +68,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-photonest}
       POSTGRES_DB: ${POSTGRES_DB:-photonest}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # PG18 images store data in a version-specific subdir and want the mount
+      # at /var/lib/postgresql (mounting .../data is rejected as a stray dir).
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-photonest}"]
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
