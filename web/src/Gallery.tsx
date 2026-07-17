@@ -1,6 +1,24 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { fetchAssets, fileUrl, searchAssets, type Asset } from "./api";
 
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return "▶";
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+export function AssetTile({ asset, onOpen }: { asset: Asset; onOpen: () => void }) {
+  if (!asset.urls.grid) return null;
+  return (
+    <div className="tile" onClick={onOpen}>
+      <img src={fileUrl(asset.urls.grid)} alt="" loading="lazy" />
+      {asset.media_type === "video" && (
+        <span className="tile-duration">{formatDuration(asset.duration_seconds)}</span>
+      )}
+    </div>
+  );
+}
+
 export function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -8,18 +26,32 @@ export function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const src = asset.urls.preview ?? asset.urls.original;
   const taken = asset.taken_at
     ? new Date(asset.taken_at).toLocaleString()
     : "unknown date";
 
   return (
     <div className="lightbox" onClick={onClose}>
-      <img src={fileUrl(src)} alt="" onClick={(e) => e.stopPropagation()} />
+      {asset.media_type === "video" ? (
+        <video
+          src={fileUrl(asset.urls.playback ?? asset.urls.original)}
+          poster={asset.urls.preview ? fileUrl(asset.urls.preview) : undefined}
+          controls
+          autoPlay
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <img
+          src={fileUrl(asset.urls.preview ?? asset.urls.original)}
+          alt=""
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       <div className="lightbox-meta" onClick={(e) => e.stopPropagation()}>
         <span>{taken}</span>
         <span>
           {asset.width}×{asset.height} · {(asset.size_bytes / 1024 / 1024).toFixed(1)} MB
+          {asset.duration_seconds !== null && ` · ${formatDuration(asset.duration_seconds)}`}
         </span>
         <a href={fileUrl(asset.urls.original)} target="_blank" rel="noreferrer">
           Open original
@@ -132,17 +164,9 @@ export default function Gallery() {
         </p>
       )}
       <div className="grid">
-        {shown.map((asset) =>
-          asset.urls.grid ? (
-            <img
-              key={asset.id}
-              src={fileUrl(asset.urls.grid)}
-              alt=""
-              loading="lazy"
-              onClick={() => setSelected(asset)}
-            />
-          ) : null,
-        )}
+        {shown.map((asset) => (
+          <AssetTile key={asset.id} asset={asset} onOpen={() => setSelected(asset)} />
+        ))}
       </div>
       {!results && <div ref={sentinel} className="sentinel" />}
       {selected && <Lightbox asset={selected} onClose={() => setSelected(null)} />}

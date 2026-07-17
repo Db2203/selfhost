@@ -4,6 +4,8 @@ export interface AssetUrls {
   grid: string | null;
   preview: string | null;
   original: string;
+  /** Videos only: stream the browser can always play. */
+  playback: string | null;
 }
 
 export interface Asset {
@@ -14,6 +16,7 @@ export interface Asset {
   size_bytes: number;
   taken_at: string | null;
   created_at: string;
+  duration_seconds: number | null;
   urls: AssetUrls;
 }
 

@@ -8,7 +8,7 @@ import {
   type Asset,
   type Person,
 } from "./api";
-import { Lightbox } from "./Gallery";
+import { AssetTile, Lightbox } from "./Gallery";
 
 function PersonDetail({
   person,
@@ -69,17 +69,9 @@ function PersonDetail({
         )}
       </div>
       <div className="grid">
-        {assets.map((asset) =>
-          asset.urls.grid ? (
-            <img
-              key={asset.id}
-              src={fileUrl(asset.urls.grid)}
-              alt=""
-              loading="lazy"
-              onClick={() => setSelected(asset)}
-            />
-          ) : null,
-        )}
+        {assets.map((asset) => (
+          <AssetTile key={asset.id} asset={asset} onOpen={() => setSelected(asset)} />
+        ))}
       </div>
       {selected && <Lightbox asset={selected} onClose={() => setSelected(null)} />}
     </div>
