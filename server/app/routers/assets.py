@@ -1,7 +1,8 @@
 import hashlib
 import mimetypes
+import tempfile
 import uuid
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
@@ -18,6 +19,7 @@ from app.queue import JobQueue, get_job_queue
 from app.schemas import AssetOut, AssetPage, AssetUrls, UploadResult
 from app.signing import sign_asset_url, verify_asset_signature
 from app.storage import Storage, get_library_storage, get_media_storage
+from app.video import VIDEO_EXTENSIONS, FfprobeError, probe_video
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -131,11 +133,11 @@ async def upload_asset(
     media: Annotated[Storage, Depends(get_media_storage)],
     queue: Annotated[JobQueue, Depends(get_job_queue)],
 ) -> UploadResult:
-    """Receive a photo from a client (phone backup). Dedup is by content
-    hash, so re-uploading or uploading a photo the indexer already has is a
-    cheap no-op."""
+    """Receive a photo or video from a client (phone backup). Dedup is by
+    content hash, so re-uploading or uploading a file the indexer already
+    has is a cheap no-op."""
     extension = PurePosixPath(file.filename or "upload.jpg").suffix.lower() or ".jpg"
-    if extension not in IMAGE_EXTENSIONS:
+    if extension not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type"
         )
@@ -157,12 +159,31 @@ async def upload_asset(
     if existing is not None:
         return UploadResult(id=existing, duplicate=True)
 
-    try:
-        width, height, taken_at = extract_metadata(data)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Not a readable image"
-        ) from None
+    duration = None
+    if extension in VIDEO_EXTENSIONS:
+        # ffprobe wants a seekable file, not bytes.
+        tmp = tempfile.NamedTemporaryFile(suffix=extension, delete=False)
+        try:
+            tmp.write(data)
+            tmp.close()
+            info = await probe_video(tmp.name)
+        except FfprobeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Not a readable video"
+            ) from None
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+        media_type = "video"
+        width, height = info.width, info.height
+        taken_at, duration = info.taken_at, info.duration_seconds
+    else:
+        try:
+            width, height, taken_at = extract_metadata(data)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Not a readable image"
+            ) from None
+        media_type = "image"
 
     path = f"uploads/{content_hash[:2]}/{content_hash}{extension}"
     await media.write(path, data)
@@ -171,11 +192,12 @@ async def upload_asset(
         storage_path=path,
         store="uploads",
         content_hash=content_hash,
-        media_type="image",
+        media_type=media_type,
         size_bytes=len(data),
         width=width,
         height=height,
         taken_at=taken_at,
+        duration_seconds=duration,
     )
     session.add(asset)
     await session.commit()
@@ -186,6 +208,7 @@ async def upload_asset(
     # an earlier backlog job's result is still cached — leaving this upload
     # unprocessed. Redundant runs are cheap (they no-op when nothing is due).
     await queue.enqueue("thumbnail_backlog_job")
+    await queue.enqueue("transcode_backlog_job")
     await queue.enqueue("embed_backlog_job")
     await queue.enqueue("detect_faces_job")
     await queue.enqueue("cluster_faces_job", str(auth.user.id))
