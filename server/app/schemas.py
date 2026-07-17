@@ -89,3 +89,20 @@ class PersonMerge(BaseModel):
 class UploadResult(BaseModel):
     id: uuid.UUID
     duplicate: bool
+
+
+class AlbumName(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class AlbumOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+    asset_count: int
+    # Signed grid-thumbnail URL of the album's most recent member.
+    cover: str | None
+
+
+class AlbumAssetIds(BaseModel):
+    asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
