@@ -25,13 +25,19 @@ const MIME_BY_EXT: Record<string, string> = {
   webp: "image/webp",
   heic: "image/heic", // iPhone default format; the server handles it
   heif: "image/heif",
+  mp4: "video/mp4",
+  mov: "video/quicktime", // iPhone videos; the server transcodes HEVC
+  m4v: "video/x-m4v",
 };
+
+const MEDIA_TYPES: MediaLibrary.MediaTypeValue[] = ["photo", "video"];
 
 async function uploadPhoto(asset: MediaLibrary.Asset): Promise<void> {
   const info = await MediaLibrary.getAssetInfoAsync(asset);
   const uri = info.localUri ?? asset.uri;
-  const name = asset.filename || `${asset.id}.jpg`;
-  const ext = name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const fallbackExt = asset.mediaType === "video" ? "mp4" : "jpg";
+  const name = asset.filename || `${asset.id}.${fallbackExt}`;
+  const ext = name.split(".").pop()?.toLowerCase() ?? fallbackExt;
 
   const form = new FormData();
   // React Native's FormData accepts {uri, name, type} file descriptors.
@@ -64,7 +70,7 @@ export default function BackupScreen() {
       setPermission(result.granted);
       if (result.granted) {
         const page = await MediaLibrary.getAssetsAsync({
-          mediaType: "photo",
+          mediaType: MEDIA_TYPES,
           first: 1,
         });
         const uploaded = await loadUploaded();
@@ -90,7 +96,7 @@ export default function BackupScreen() {
 
       for (;;) {
         const page = await MediaLibrary.getAssetsAsync({
-          mediaType: "photo",
+          mediaType: MEDIA_TYPES,
           first: BATCH,
           after: cursor,
           sortBy: MediaLibrary.SortBy.creationTime,
@@ -142,10 +148,10 @@ export default function BackupScreen() {
     <View style={styles.wrap}>
       <Text style={styles.title}>Camera-roll backup</Text>
       <Text style={styles.text}>
-        {uploadedCount} of {totalOnDevice} photos backed up to your server.
+        {uploadedCount} of {totalOnDevice} photos & videos backed up to your server.
       </Text>
       <Text style={styles.muted}>
-        Photos are deduplicated by content on the server, so re-running is
+        Everything is deduplicated by content on the server, so re-running is
         always safe.
       </Text>
       <TouchableOpacity style={styles.button} disabled={running} onPress={backUpNow}>
