@@ -26,6 +26,7 @@ and "show me photos of the beach" search.
 - [x] iOS support (same Expo app)
 - [x] Scale-out storage (S3/MinIO behind a storage interface) and remote access (Tailscale)
 - [x] Videos: poster thumbnails, one-time HEVC→H.264 transcode, seekable streaming (web + mobile)
+- [x] Library management: favorites, albums, and delete that survives re-indexing (tombstones)
 
 ## Architecture
 
