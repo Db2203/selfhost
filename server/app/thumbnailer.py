@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Asset, Thumbnail
 from app.storage.base import Storage
+from app.video import extract_poster_frame, spooled_local_copy
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,18 @@ def render_thumbnail(data: bytes, max_side: int) -> tuple[bytes, int, int]:
         return out.getvalue(), img.width, img.height
 
 
+async def _thumbnail_source(library: Storage, media: Storage, asset: Asset) -> bytes:
+    """Image bytes to thumbnail from: the original for photos, an extracted
+    poster frame for videos."""
+    # Indexed originals live in the read-only library; phone uploads
+    # in media storage (the same split the file endpoint makes).
+    source = library if asset.store == "library" else media
+    if asset.media_type == "image":
+        return await source.read(asset.storage_path)
+    async with spooled_local_copy(source, asset.storage_path) as (local, _):
+        return await extract_poster_frame(local)
+
+
 async def thumbnail_asset(
     session: AsyncSession, library: Storage, media: Storage, asset: Asset
 ) -> int:
@@ -72,10 +85,7 @@ async def thumbnail_asset(
         if kind in existing_kinds:
             continue
         if data is None:
-            # Indexed originals live in the read-only library; phone uploads
-            # in media storage (the same split the file endpoint makes).
-            source = library if asset.store == "library" else media
-            data = await source.read(asset.storage_path)
+            data = await _thumbnail_source(library, media, asset)
         rendered, width, height = render_thumbnail(data, max_side)
         path = thumbnail_path(asset.content_hash, kind)
         await media.write(path, rendered)
@@ -93,8 +103,7 @@ async def thumbnail_backlog(
 ) -> ThumbnailReport:
     """Generate thumbnails for every asset that is missing any kind."""
     report = ThumbnailReport()
-    # Images only: video posters need a frame extracted first (see app.video).
-    result = await session.execute(select(Asset).where(Asset.media_type == "image"))
+    result = await session.execute(select(Asset))
     for asset in result.scalars():
         try:
             made = await thumbnail_asset(session, library, media, asset)
