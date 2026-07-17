@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { fetchAssets, fileUrl, searchAssets, type Asset } from "./api";
+import {
+  deleteAsset,
+  fetchAssets,
+  fileUrl,
+  searchAssets,
+  setFavorite,
+  type Asset,
+} from "./api";
 
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "▶";
@@ -19,7 +26,17 @@ export function AssetTile({ asset, onOpen }: { asset: Asset; onOpen: () => void 
   );
 }
 
-export function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+export function Lightbox({
+  asset,
+  onClose,
+  onToggleFavorite,
+  onDelete,
+}: {
+  asset: Asset;
+  onClose: () => void;
+  onToggleFavorite?: (asset: Asset) => void;
+  onDelete?: (asset: Asset) => void;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -53,6 +70,16 @@ export function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void
           {asset.width}×{asset.height} · {(asset.size_bytes / 1024 / 1024).toFixed(1)} MB
           {asset.duration_seconds !== null && ` · ${formatDuration(asset.duration_seconds)}`}
         </span>
+        {onToggleFavorite && (
+          <button
+            className={asset.favorite ? "favorite active" : "favorite"}
+            title={asset.favorite ? "Remove from favorites" : "Add to favorites"}
+            onClick={() => onToggleFavorite(asset)}
+          >
+            {asset.favorite ? "♥" : "♡"}
+          </button>
+        )}
+        {onDelete && <button onClick={() => onDelete(asset)}>Delete</button>}
         <a href={fileUrl(asset.urls.original)} target="_blank" rel="noreferrer">
           Open original
         </a>
@@ -68,8 +95,48 @@ export default function Gallery() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Asset[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [favorites, setFavorites] = useState<Asset[] | null>(null);
   const loading = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
+
+  /** Apply an updated asset to every list that may contain it. */
+  function patchEverywhere(updated: Asset) {
+    const patch = (list: Asset[]) => list.map((a) => (a.id === updated.id ? updated : a));
+    setAssets(patch);
+    setResults((prev) => (prev ? patch(prev) : prev));
+    setFavorites((prev) =>
+      prev ? patch(prev).filter((a) => a.favorite) : prev,
+    );
+    setSelected((prev) => (prev?.id === updated.id ? updated : prev));
+  }
+
+  async function toggleFavorite(asset: Asset) {
+    patchEverywhere(await setFavorite(asset.id, !asset.favorite));
+  }
+
+  async function removeAsset(asset: Asset) {
+    if (!confirm("Delete this item from your library?")) return;
+    await deleteAsset(asset.id);
+    const drop = (list: Asset[]) => list.filter((a) => a.id !== asset.id);
+    setAssets((prev) => {
+      const next = drop(prev);
+      countRef.current = next.length;
+      return next;
+    });
+    setResults((prev) => (prev ? drop(prev) : prev));
+    setFavorites((prev) => (prev ? drop(prev) : prev));
+    if (totalRef.current !== null) totalRef.current -= 1;
+    setTotal((prev) => (prev === null ? prev : prev - 1));
+    setSelected(null);
+  }
+
+  async function toggleFavoritesView() {
+    if (favorites) {
+      setFavorites(null);
+      return;
+    }
+    setFavorites((await fetchAssets(0, 200, true)).items);
+  }
 
   async function submitSearch(event: FormEvent) {
     event.preventDefault();
@@ -132,7 +199,7 @@ export default function Gallery() {
     );
   }
 
-  const shown = results ?? assets;
+  const shown = results ?? favorites ?? assets;
 
   return (
     <>
@@ -157,10 +224,23 @@ export default function Gallery() {
             Clear
           </button>
         )}
+        <button
+          type="button"
+          className={favorites ? "active" : ""}
+          title="Show favorites"
+          onClick={toggleFavoritesView}
+        >
+          ♥
+        </button>
       </form>
       {results && (
         <p className="muted search-note">
           Top matches for “{query.trim()}”, best first
+        </p>
+      )}
+      {!results && favorites && (
+        <p className="muted search-note">
+          Favorites{favorites.length === 0 && " — none yet. Open a photo and tap ♡."}
         </p>
       )}
       <div className="grid">
@@ -168,8 +248,15 @@ export default function Gallery() {
           <AssetTile key={asset.id} asset={asset} onOpen={() => setSelected(asset)} />
         ))}
       </div>
-      {!results && <div ref={sentinel} className="sentinel" />}
-      {selected && <Lightbox asset={selected} onClose={() => setSelected(null)} />}
+      {!results && !favorites && <div ref={sentinel} className="sentinel" />}
+      {selected && (
+        <Lightbox
+          asset={selected}
+          onClose={() => setSelected(null)}
+          onToggleFavorite={toggleFavorite}
+          onDelete={removeAsset}
+        />
+      )}
     </>
   );
 }
