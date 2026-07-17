@@ -1,3 +1,4 @@
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
@@ -16,6 +17,12 @@ import { colors } from "./theme";
 const COLUMNS = 3;
 const tile = Dimensions.get("window").width / COLUMNS;
 
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return "▶";
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
   const src = asset.urls.preview ?? asset.urls.original;
   const taken = asset.taken_at ? new Date(asset.taken_at).toLocaleString() : "unknown date";
@@ -27,6 +34,27 @@ function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
           {taken} · {asset.width}×{asset.height}
         </Text>
       </TouchableOpacity>
+    </Modal>
+  );
+}
+
+function VideoLightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  const player = useVideoPlayer(fileUrl(asset.urls.playback ?? asset.urls.original), (p) => {
+    p.play();
+  });
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.lightbox}>
+        <VideoView
+          player={player}
+          style={styles.lightboxImage}
+          contentFit="contain"
+          nativeControls
+        />
+        <TouchableOpacity onPress={onClose}>
+          <Text style={styles.meta}>Close</Text>
+        </TouchableOpacity>
+      </View>
     </Modal>
   );
 }
@@ -94,6 +122,9 @@ export default function GalleryScreen() {
           item.urls.grid ? (
             <TouchableOpacity onPress={() => setSelected(item)}>
               <Image source={{ uri: fileUrl(item.urls.grid) }} style={styles.tile} />
+              {item.media_type === "video" && (
+                <Text style={styles.tileDuration}>{formatDuration(item.duration_seconds)}</Text>
+              )}
             </TouchableOpacity>
           ) : null
         }
@@ -103,7 +134,12 @@ export default function GalleryScreen() {
           ) : null
         }
       />
-      {selected && <Lightbox asset={selected} onClose={() => setSelected(null)} />}
+      {selected &&
+        (selected.media_type === "video" ? (
+          <VideoLightbox asset={selected} onClose={() => setSelected(null)} />
+        ) : (
+          <Lightbox asset={selected} onClose={() => setSelected(null)} />
+        ))}
     </View>
   );
 }
@@ -121,6 +157,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tile: { width: tile, height: tile, backgroundColor: colors.surface },
+  tileDuration: {
+    position: "absolute",
+    right: 6,
+    bottom: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.65)",
+    color: "#fff",
+    fontSize: 11,
+  },
   empty: { color: colors.muted, textAlign: "center", marginTop: 60, padding: 20 },
   lightbox: {
     flex: 1,
