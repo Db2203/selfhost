@@ -117,11 +117,12 @@ async def detect_faces_backlog(
                     )
                 )
             ).scalar_one_or_none()
-            data = (
-                await media.read(thumb.storage_path)
-                if thumb is not None
-                else await library.read(asset.storage_path)
-            )
+            if thumb is not None:
+                data = await media.read(thumb.storage_path)
+            else:
+                # Library assets vs phone uploads (which live in media storage).
+                source = library if asset.store == "library" else media
+                data = await source.read(asset.storage_path)
             for found in detector.detect(data):
                 x, y, w, h = found.bbox
                 session.add(

@@ -72,7 +72,10 @@ async def thumbnail_asset(
         if kind in existing_kinds:
             continue
         if data is None:
-            data = await library.read(asset.storage_path)
+            # Indexed originals live in the read-only library; phone uploads
+            # in media storage (the same split the file endpoint makes).
+            source = library if asset.store == "library" else media
+            data = await source.read(asset.storage_path)
         rendered, width, height = render_thumbnail(data, max_side)
         path = thumbnail_path(asset.content_hash, kind)
         await media.write(path, rendered)
