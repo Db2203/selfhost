@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     TypeDecorator,
     UniqueConstraint,
     Uuid,
+    false,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -96,6 +98,7 @@ class Asset(Base):
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     taken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    favorite: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Video-only: clip length in seconds (from ffprobe).
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     # Video-only: media-storage path of the web-safe (H.264) rendition, or

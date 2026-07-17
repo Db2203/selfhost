@@ -50,7 +50,12 @@ class AssetOut(BaseModel):
     taken_at: datetime | None
     created_at: datetime
     duration_seconds: float | None = None  # videos only
+    favorite: bool = False
     urls: AssetUrls
+
+
+class AssetUpdate(BaseModel):
+    favorite: bool
 
 
 class AssetPage(BaseModel):
