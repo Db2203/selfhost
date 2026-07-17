@@ -17,7 +17,7 @@ from pillow_heif import register_heif_opener
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Asset
+from app.models import Asset, DeletedAsset
 from app.storage.base import Storage
 from app.video import VIDEO_EXTENSIONS, FfprobeError, probe_video, spooled_local_copy
 
@@ -39,6 +39,7 @@ class IndexReport:
     scanned: int = 0
     added: int = 0
     skipped_duplicates: int = 0
+    skipped_deleted: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -73,19 +74,34 @@ async def hash_file(storage: Storage, path: str) -> str:
     return digest.hexdigest()
 
 
-async def _is_duplicate(session: AsyncSession, owner_id: uuid.UUID, content_hash: str) -> bool:
+async def _skip_reason(
+    session: AsyncSession, owner_id: uuid.UUID, content_hash: str, report: IndexReport
+) -> bool:
+    """Record why a hash shouldn't become an asset; True when it shouldn't."""
     existing = await session.execute(
         select(Asset.id).where(Asset.owner_id == owner_id, Asset.content_hash == content_hash)
     )
-    return existing.scalar_one_or_none() is not None
+    if existing.scalar_one_or_none() is not None:
+        report.skipped_duplicates += 1
+        return True
+    # The user deleted this in the app; the (read-only) file remaining in the
+    # library must not bring it back.
+    tombstone = await session.execute(
+        select(DeletedAsset.id).where(
+            DeletedAsset.owner_id == owner_id, DeletedAsset.content_hash == content_hash
+        )
+    )
+    if tombstone.scalar_one_or_none() is not None:
+        report.skipped_deleted += 1
+        return True
+    return False
 
 
 async def _image_asset(
     session: AsyncSession, library: Storage, owner_id: uuid.UUID, path: str, report: IndexReport
 ) -> Asset | None:
     content_hash = await hash_file(library, path)
-    if await _is_duplicate(session, owner_id, content_hash):
-        report.skipped_duplicates += 1
+    if await _skip_reason(session, owner_id, content_hash, report):
         return None
 
     data = await library.read(path)
@@ -113,8 +129,7 @@ async def _video_asset(
     # Spool to a temp file (ffprobe needs seekable input) and hash in the
     # same pass, so a large video is only pulled from storage once.
     async with spooled_local_copy(library, path) as (local, content_hash):
-        if await _is_duplicate(session, owner_id, content_hash):
-            report.skipped_duplicates += 1
+        if await _skip_reason(session, owner_id, content_hash, report):
             return None
 
         try:

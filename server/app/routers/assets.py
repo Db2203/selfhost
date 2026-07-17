@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import mimetypes
 import tempfile
 import uuid
@@ -7,19 +8,21 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_session
 from app.deps import AuthContext, get_auth
 from app.indexer import IMAGE_EXTENSIONS, extract_metadata
-from app.models import Asset, Thumbnail
+from app.models import Asset, DeletedAsset, Face, Thumbnail
 from app.queue import JobQueue, get_job_queue
 from app.schemas import AssetOut, AssetPage, AssetUpdate, AssetUrls, UploadResult
 from app.signing import sign_asset_url, verify_asset_signature
 from app.storage import Storage, get_library_storage, get_media_storage
 from app.video import VIDEO_EXTENSIONS, FfprobeError, probe_video
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -163,6 +166,14 @@ async def upload_asset(
     if existing is not None:
         return UploadResult(id=existing, duplicate=True)
 
+    # Re-uploading previously deleted content is an explicit request to
+    # bring it back: clear the tombstone.
+    await session.execute(
+        delete(DeletedAsset).where(
+            DeletedAsset.owner_id == auth.user.id, DeletedAsset.content_hash == content_hash
+        )
+    )
+
     duration = None
     if extension in VIDEO_EXTENSIONS:
         # ffprobe wants a seekable file, not bytes.
@@ -235,6 +246,49 @@ async def get_asset(
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
     return asset_to_out(asset)
+
+
+@router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_asset(
+    asset_id: uuid.UUID,
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    media: Annotated[Storage, Depends(get_media_storage)],
+) -> None:
+    """Remove an asset and everything derived from it.
+
+    Library originals are on a read-only mount and stay put — a tombstone
+    stops the next re-index from bringing the asset back. Uploaded
+    originals are ours, so their bytes are removed too.
+    """
+    result = await session.execute(
+        select(Asset)
+        .where(Asset.id == asset_id, Asset.owner_id == auth.user.id)
+        .options(selectinload(Asset.thumbnails))
+    )
+    asset = result.scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
+
+    doomed = [t.storage_path for t in asset.thumbnails]
+    if asset.playback_path:
+        doomed.append(asset.playback_path)
+    if asset.store == "uploads":
+        doomed.append(asset.storage_path)
+
+    session.add(DeletedAsset(owner_id=auth.user.id, content_hash=asset.content_hash))
+    await session.execute(delete(Face).where(Face.asset_id == asset.id))
+    await session.execute(delete(Thumbnail).where(Thumbnail.asset_id == asset.id))
+    await session.execute(delete(Asset).where(Asset.id == asset.id))
+    await session.commit()
+
+    # Best effort, after the commit: the DB is authoritative and an
+    # orphaned file is harmless, but a 500 here would be a lie.
+    for path in doomed:
+        try:
+            await media.delete(path)
+        except Exception:
+            logger.warning("could not delete %s from media storage", path)
 
 
 @router.patch("/{asset_id}", response_model=AssetOut)
