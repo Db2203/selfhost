@@ -7,14 +7,17 @@ import subprocess
 import uuid
 
 import pytest
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.embedding import FakeEmbedder
 from app.indexer import index_library
-from app.models import Asset, User
+from app.models import Asset, Thumbnail, User
+from app.search import embed_backlog
 from app.security import hash_password
 from app.storage.local import LocalFilesystemStorage
-from app.thumbnailer import thumbnail_backlog
+from app.thumbnailer import THUMBNAIL_KINDS, thumbnail_backlog
 from app.video import probe_video
 
 pytestmark = pytest.mark.skipif(
@@ -112,18 +115,51 @@ def test_broken_video_is_reported_not_fatal(tmp_path, session_and_user):
     assert "broken.mp4" in report.errors[0]
 
 
-def test_thumbnail_backlog_leaves_videos_alone(tmp_path, session_and_user):
-    """Until poster frames land, video rows must not error the image backlog."""
+def test_videos_get_poster_thumbnails(tmp_path, session_and_user):
     factory, user_id = session_and_user
     root = tmp_path / "library"
-    make_mp4(root / "clip.mp4")
+    make_mp4(root / "clip.mp4", seconds=2.0)
     media = LocalFilesystemStorage(tmp_path / "media")
 
     async def go():
         async with factory() as session:
             await index_library(session, LocalFilesystemStorage(root), user_id)
-            return await thumbnail_backlog(session, LocalFilesystemStorage(root), media)
+            report = await thumbnail_backlog(session, LocalFilesystemStorage(root), media)
+            result = await session.execute(select(Thumbnail))
+            return report, list(result.scalars())
 
-    report = asyncio.run(go())
+    report, thumbs = asyncio.run(go())
+
     assert report.errors == []
-    assert report.generated == 0
+    assert {t.kind for t in thumbs} == set(THUMBNAIL_KINDS)
+    for thumb in thumbs:
+        with Image.open(tmp_path / "media" / thumb.storage_path) as img:
+            assert img.format == "WEBP"
+            # testsrc frames are colorful; a decoded poster shouldn't be black.
+            assert img.convert("L").getextrema()[1] > 32
+
+
+def test_videos_embed_via_their_poster(tmp_path, session_and_user):
+    """Once the poster exists, the (fake) embedder picks it up — videos
+    become searchable without ever feeding raw video bytes to CLIP."""
+    factory, user_id = session_and_user
+    root = tmp_path / "library"
+    make_mp4(root / "clip.mp4", seconds=2.0)
+    library = LocalFilesystemStorage(root)
+    media = LocalFilesystemStorage(tmp_path / "media")
+
+    async def go():
+        async with factory() as session:
+            await index_library(session, library, user_id)
+            skipped = await embed_backlog(session, FakeEmbedder(), library, media)
+            await thumbnail_backlog(session, library, media)
+            embedded = await embed_backlog(session, FakeEmbedder(), library, media)
+            result = await session.execute(select(Asset))
+            return skipped, embedded, result.scalar_one()
+
+    skipped, embedded, video = asyncio.run(go())
+
+    assert skipped.embedded == 0  # no poster yet: waits instead of erroring
+    assert skipped.errors == []
+    assert embedded.embedded == 1
+    assert video.embedding is not None

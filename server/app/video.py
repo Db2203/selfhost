@@ -28,6 +28,10 @@ class FfprobeError(RuntimeError):
     """ffprobe failed or returned something unusable."""
 
 
+class FfmpegError(RuntimeError):
+    """ffmpeg failed (frame extraction, transcode)."""
+
+
 @dataclass
 class VideoInfo:
     width: int | None
@@ -85,6 +89,29 @@ async def probe_video(local_path: str | Path) -> VideoInfo:
         audio_codec=audio.get("codec_name") if audio else None,
         taken_at=_parse_creation_time(raw_created) if raw_created else None,
     )
+
+
+async def extract_poster_frame(local_path: str | Path, at_seconds: float = 1.0) -> bytes:
+    """Grab a single frame as JPEG bytes (thumbnail/embedding input).
+
+    Seeks to ~1s so the poster isn't a black fade-in frame; clips shorter
+    than that fall back to the first frame.
+    """
+    for seek in (at_seconds, 0.0):
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-v", "error",
+            "-ss", f"{seek:g}",
+            "-i", str(local_path),
+            "-frames:v", "1",
+            "-f", "image2pipe", "-c:v", "mjpeg", "-",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode == 0 and stdout:
+            return stdout
+    raise FfmpegError(stderr.decode(errors="replace").strip() or "no frame extracted")
 
 
 @asynccontextmanager
