@@ -16,7 +16,7 @@ from app.deps import AuthContext, get_auth
 from app.indexer import IMAGE_EXTENSIONS, extract_metadata
 from app.models import Asset, Thumbnail
 from app.queue import JobQueue, get_job_queue
-from app.schemas import AssetOut, AssetPage, AssetUrls, UploadResult
+from app.schemas import AssetOut, AssetPage, AssetUpdate, AssetUrls, UploadResult
 from app.signing import sign_asset_url, verify_asset_signature
 from app.storage import Storage, get_library_storage, get_media_storage
 from app.video import VIDEO_EXTENSIONS, FfprobeError, probe_video
@@ -38,6 +38,7 @@ def asset_to_out(asset: Asset) -> AssetOut:
         taken_at=asset.taken_at,
         created_at=asset.created_at,
         duration_seconds=asset.duration_seconds,
+        favorite=asset.favorite,
         urls=AssetUrls(
             grid=sign_asset_url(asset.id, "grid") if "grid" in kinds else None,
             preview=sign_asset_url(asset.id, "preview") if "preview" in kinds else None,
@@ -109,12 +110,15 @@ async def list_assets(
     session: Annotated[AsyncSession, Depends(get_session)],
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    favorite: bool | None = None,
 ) -> AssetPage:
-    owner_filter = Asset.owner_id == auth.user.id
-    total = await session.scalar(select(func.count()).select_from(Asset).where(owner_filter))
+    filters = [Asset.owner_id == auth.user.id]
+    if favorite is not None:
+        filters.append(Asset.favorite == favorite)
+    total = await session.scalar(select(func.count()).select_from(Asset).where(*filters))
     result = await session.execute(
         select(Asset)
-        .where(owner_filter)
+        .where(*filters)
         .options(selectinload(Asset.thumbnails))
         # Newest first; assets with no EXIF date sort by when they were indexed.
         .order_by(Asset.taken_at.desc().nulls_last(), Asset.created_at.desc())
@@ -230,6 +234,27 @@ async def get_asset(
     asset = result.scalar_one_or_none()
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
+    return asset_to_out(asset)
+
+
+@router.patch("/{asset_id}", response_model=AssetOut)
+async def update_asset(
+    asset_id: uuid.UUID,
+    body: AssetUpdate,
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AssetOut:
+    result = await session.execute(
+        select(Asset)
+        .where(Asset.id == asset_id, Asset.owner_id == auth.user.id)
+        .options(selectinload(Asset.thumbnails))
+    )
+    asset = result.scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
+
+    asset.favorite = body.favorite
+    await session.commit()
     return asset_to_out(asset)
 
 

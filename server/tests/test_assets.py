@@ -127,6 +127,51 @@ def test_tampered_or_expired_signature_is_rejected(populated, test_user):
     assert populated.get(swapped).status_code == 403
 
 
+def test_favorite_toggle_and_filter(populated, test_user):
+    tokens = login(populated, test_user)
+    items = populated.get("/assets", headers=auth_header(tokens)).json()["items"]
+    assert all(item["favorite"] is False for item in items)
+
+    marked = populated.patch(
+        f"/assets/{items[0]['id']}",
+        json={"favorite": True},
+        headers=auth_header(tokens),
+    )
+    assert marked.status_code == 200
+    assert marked.json()["favorite"] is True
+
+    favorites = populated.get("/assets?favorite=true", headers=auth_header(tokens)).json()
+    assert favorites["total"] == 1
+    assert favorites["items"][0]["id"] == items[0]["id"]
+
+    # Un-favorite puts the filter back to empty.
+    populated.patch(
+        f"/assets/{items[0]['id']}", json={"favorite": False}, headers=auth_header(tokens)
+    )
+    assert populated.get("/assets?favorite=true", headers=auth_header(tokens)).json()["total"] == 0
+
+
+def test_favorite_requires_ownership(populated, test_user):
+    engine = populated.app.state.test_engine
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    other = f"fav-{uuid.uuid4().hex[:6]}"
+
+    async def go():
+        async with factory() as session:
+            session.add(User(username=other, password_hash=hash_password("pw123456")))
+            await session.commit()
+
+    asyncio.run(go())
+    owner_tokens = login(populated, test_user)
+    item = populated.get("/assets", headers=auth_header(owner_tokens)).json()["items"][0]
+
+    intruder = login(populated, (other, "pw123456"))
+    response = populated.patch(
+        f"/assets/{item['id']}", json={"favorite": True}, headers=auth_header(intruder)
+    )
+    assert response.status_code == 404
+
+
 def test_range_requests_serve_partial_content(populated, test_user):
     tokens = login(populated, test_user)
     item = populated.get("/assets", headers=auth_header(tokens)).json()["items"][0]
