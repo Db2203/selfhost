@@ -148,6 +148,22 @@ main {
   background: var(--surface);
 }
 
+.tile {
+  position: relative;
+}
+
+.tile-duration {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
 .sentinel {
   height: 1px;
 }
@@ -176,7 +192,8 @@ code {
   gap: 12px;
 }
 
-.lightbox img {
+.lightbox img,
+.lightbox video {
   max-width: 96vw;
   max-height: 86vh;
   object-fit: contain;
