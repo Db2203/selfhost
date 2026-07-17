@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  addToAlbum,
   deleteAsset,
+  fetchAlbums,
   fetchAssets,
   fileUrl,
   searchAssets,
   setFavorite,
+  type Album,
   type Asset,
 } from "./api";
 
@@ -31,11 +34,15 @@ export function Lightbox({
   onClose,
   onToggleFavorite,
   onDelete,
+  albums,
+  onAddToAlbum,
 }: {
   asset: Asset;
   onClose: () => void;
   onToggleFavorite?: (asset: Asset) => void;
   onDelete?: (asset: Asset) => void;
+  albums?: Album[];
+  onAddToAlbum?: (asset: Asset, albumId: string) => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -80,6 +87,25 @@ export function Lightbox({
           </button>
         )}
         {onDelete && <button onClick={() => onDelete(asset)}>Delete</button>}
+        {onAddToAlbum && albums && albums.length > 0 && (
+          <select
+            defaultValue=""
+            onChange={(e) => {
+              if (!e.target.value) return;
+              onAddToAlbum(asset, e.target.value);
+              e.target.value = "";
+            }}
+          >
+            <option value="" disabled>
+              Add to album…
+            </option>
+            {albums.map((album) => (
+              <option key={album.id} value={album.id}>
+                {album.name}
+              </option>
+            ))}
+          </select>
+        )}
         <a href={fileUrl(asset.urls.original)} target="_blank" rel="noreferrer">
           Open original
         </a>
@@ -96,8 +122,19 @@ export default function Gallery() {
   const [results, setResults] = useState<Asset[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [favorites, setFavorites] = useState<Asset[] | null>(null);
+  const [albums, setAlbums] = useState<Album[]>([]);
   const loading = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAlbums().then((list) => {
+      if (!cancelled) setAlbums(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /** Apply an updated asset to every list that may contain it. */
   function patchEverywhere(updated: Asset) {
@@ -255,6 +292,8 @@ export default function Gallery() {
           onClose={() => setSelected(null)}
           onToggleFavorite={toggleFavorite}
           onDelete={removeAsset}
+          albums={albums}
+          onAddToAlbum={(asset, albumId) => addToAlbum(albumId, [asset.id])}
         />
       )}
     </>

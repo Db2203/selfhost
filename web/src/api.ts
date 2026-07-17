@@ -209,6 +209,66 @@ export async function fetchPersonAssets(id: string): Promise<Asset[]> {
   return response.json();
 }
 
+export interface Album {
+  id: string;
+  name: string;
+  created_at: string;
+  asset_count: number;
+  cover: string | null;
+}
+
+export async function fetchAlbums(): Promise<Album[]> {
+  const response = await apiFetch("/albums");
+  if (!response.ok) throw new Error("Failed to load albums");
+  return response.json();
+}
+
+export async function createAlbum(name: string): Promise<Album> {
+  const response = await apiFetch("/albums", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw new Error("Failed to create album");
+  return response.json();
+}
+
+export async function renameAlbum(id: string, name: string): Promise<void> {
+  const response = await apiFetch(`/albums/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw new Error("Rename failed");
+}
+
+export async function deleteAlbum(id: string): Promise<void> {
+  const response = await apiFetch(`/albums/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Failed to delete album");
+}
+
+export async function addToAlbum(albumId: string, assetIds: string[]): Promise<void> {
+  const response = await apiFetch(`/albums/${albumId}/assets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ asset_ids: assetIds }),
+  });
+  if (!response.ok) throw new Error("Failed to add to album");
+}
+
+export async function removeFromAlbum(albumId: string, assetId: string): Promise<void> {
+  const response = await apiFetch(`/albums/${albumId}/assets/${assetId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Failed to remove from album");
+}
+
+export async function fetchAlbumAssets(albumId: string): Promise<Asset[]> {
+  const response = await apiFetch(`/albums/${albumId}/assets`);
+  if (!response.ok) throw new Error("Failed to load album");
+  return response.json();
+}
+
 export async function fetchDevices(): Promise<Device[]> {
   const response = await apiFetch("/devices");
   if (!response.ok) throw new Error("Failed to load devices");

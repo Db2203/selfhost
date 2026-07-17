@@ -1,11 +1,12 @@
 import { useState } from "react";
+import Albums from "./Albums";
 import { isLoggedIn, logout } from "./api";
 import Devices from "./Devices";
 import Gallery from "./Gallery";
 import Login from "./Login";
 import People from "./People";
 
-type View = "gallery" | "people" | "devices";
+type View = "gallery" | "albums" | "people" | "devices";
 
 export default function App() {
   const [authed, setAuthed] = useState(isLoggedIn());
@@ -23,6 +24,12 @@ export default function App() {
             onClick={() => setView("gallery")}
           >
             Photos
+          </button>
+          <button
+            className={view === "albums" ? "active" : ""}
+            onClick={() => setView("albums")}
+          >
+            Albums
           </button>
           <button
             className={view === "people" ? "active" : ""}
@@ -48,6 +55,7 @@ export default function App() {
       </header>
       <main>
         {view === "gallery" && <Gallery />}
+        {view === "albums" && <Albums />}
         {view === "people" && <People />}
         {view === "devices" && <Devices />}
       </main>
