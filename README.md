@@ -25,6 +25,7 @@ and "show me photos of the beach" search.
 - [x] Android app with camera-roll backup (safe to re-run; deduplicated server-side)
 - [x] iOS support (same Expo app)
 - [x] Scale-out storage (S3/MinIO behind a storage interface) and remote access (Tailscale)
+- [x] Videos: poster thumbnails, one-time HEVC→H.264 transcode, seekable streaming (web + mobile)
 
 ## Architecture
 
@@ -37,7 +38,7 @@ flowchart LR
     caddy[Caddy<br/>TLS + static + /api]
     subgraph host [Your hardware]
         api[API · FastAPI<br/>stateless]
-        worker[Workers · arq<br/>index · thumbs · CLIP · faces]
+        worker[Workers · arq<br/>index · thumbs · video · CLIP · faces]
         pg[(Postgres<br/>+ pgvector)]
         redis[(Redis<br/>job queue)]
         store[(Storage interface<br/>local FS / S3 / MinIO)]
@@ -94,6 +95,7 @@ cd server && pytest          # 47 tests locally (SQLite + fakes)
 | Web      | React · Vite · TypeScript               |
 | Mobile   | React Native · Expo (Android + iOS)     |
 | Jobs     | arq · Redis                             |
+| Video    | ffmpeg (probe · posters · H.264 renditions) |
 | AI       | OpenCLIP ViT-B/32 (search) · InsightFace/ArcFace (faces) — both local, CPU |
 | Serving  | Caddy (TLS, static, reverse proxy) · Docker Compose |
 
