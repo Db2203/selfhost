@@ -17,6 +17,7 @@ export interface Asset {
   taken_at: string | null;
   created_at: string;
   duration_seconds: number | null;
+  favorite: boolean;
   urls: AssetUrls;
 }
 
@@ -134,10 +135,30 @@ export async function apiFetch(
   return response;
 }
 
-export async function fetchAssets(offset: number, limit = 100): Promise<AssetPage> {
-  const response = await apiFetch(`/assets?offset=${offset}&limit=${limit}`);
+export async function fetchAssets(
+  offset: number,
+  limit = 100,
+  favorite?: boolean,
+): Promise<AssetPage> {
+  const filter = favorite === undefined ? "" : `&favorite=${favorite}`;
+  const response = await apiFetch(`/assets?offset=${offset}&limit=${limit}${filter}`);
   if (!response.ok) throw new Error("Failed to load assets");
   return response.json();
+}
+
+export async function setFavorite(id: string, favorite: boolean): Promise<Asset> {
+  const response = await apiFetch(`/assets/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ favorite }),
+  });
+  if (!response.ok) throw new Error("Failed to update");
+  return response.json();
+}
+
+export async function deleteAsset(id: string): Promise<void> {
+  const response = await apiFetch(`/assets/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Failed to delete");
 }
 
 export interface SearchResults {
