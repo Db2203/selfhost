@@ -57,8 +57,10 @@ class LocalFilesystemStorage(Storage):
         def _walk() -> list[str]:
             if not base.is_dir():
                 return []
+            # as_posix(): keys are stored in the DB and must use "/" even
+            # when the host filesystem is Windows.
             return sorted(
-                str(p.relative_to(self.root))
+                p.relative_to(self.root).as_posix()
                 for p in base.rglob("*")
                 if p.is_file()
             )
