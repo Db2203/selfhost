@@ -179,6 +179,35 @@ class Face(Base):
     person: Mapped[Person | None] = relationship(back_populates="faces")
 
 
+class Album(Base):
+    """A user-curated set of assets (an asset can be in many albums)."""
+
+    __tablename__ = "albums"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AlbumAsset(Base):
+    __tablename__ = "album_assets"
+    __table_args__ = (UniqueConstraint("album_id", "asset_id", name="uq_album_asset"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    album_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("albums.id", ondelete="CASCADE"), index=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), index=True
+    )
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Thumbnail(Base):
     __tablename__ = "thumbnails"
     __table_args__ = (UniqueConstraint("asset_id", "kind", name="uq_thumbnail_asset_kind"),)

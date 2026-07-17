@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.db import get_session
 from app.deps import AuthContext, get_auth
 from app.indexer import IMAGE_EXTENSIONS, extract_metadata
-from app.models import Asset, DeletedAsset, Face, Thumbnail
+from app.models import AlbumAsset, Asset, DeletedAsset, Face, Thumbnail
 from app.queue import JobQueue, get_job_queue
 from app.schemas import AssetOut, AssetPage, AssetUpdate, AssetUrls, UploadResult
 from app.signing import sign_asset_url, verify_asset_signature
@@ -277,6 +277,7 @@ async def delete_asset(
         doomed.append(asset.storage_path)
 
     session.add(DeletedAsset(owner_id=auth.user.id, content_hash=asset.content_hash))
+    await session.execute(delete(AlbumAsset).where(AlbumAsset.asset_id == asset.id))
     await session.execute(delete(Face).where(Face.asset_id == asset.id))
     await session.execute(delete(Thumbnail).where(Thumbnail.asset_id == asset.id))
     await session.execute(delete(Asset).where(Asset.id == asset.id))
