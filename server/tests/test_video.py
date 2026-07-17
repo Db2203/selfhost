@@ -219,6 +219,45 @@ def test_playback_url_serves_the_watchable_stream(tmp_path, client, test_user):
         assert part.content == full.content[:100]
 
 
+def test_video_upload_from_phone(tmp_path, client, test_user):
+    from app.queue import get_job_queue
+    from app.storage import get_library_storage, get_media_storage
+    from tests.test_auth import auth_header, login
+    from tests.test_upload import RecordingQueue
+
+    make_mp4(tmp_path / "phone.mp4", seconds=1.0)
+    media = LocalFilesystemStorage(tmp_path / "media")
+    client.app.dependency_overrides[get_library_storage] = lambda: LocalFilesystemStorage(
+        tmp_path / "library"
+    )
+    client.app.dependency_overrides[get_media_storage] = lambda: media
+    queue = RecordingQueue()
+    client.app.dependency_overrides[get_job_queue] = lambda: queue
+    tokens = login(client, test_user)
+
+    response = client.post(
+        "/assets/upload",
+        files={"file": ("phone.mp4", (tmp_path / "phone.mp4").read_bytes(), "video/mp4")},
+        headers=auth_header(tokens),
+    )
+    assert response.status_code == 201
+    assert response.json()["duplicate"] is False
+
+    item = client.get(f"/assets/{response.json()['id']}", headers=auth_header(tokens)).json()
+    assert item["media_type"] == "video"
+    assert item["duration_seconds"] == pytest.approx(1.0, abs=0.3)
+    assert item["urls"]["playback"] is not None
+    # The rendition decision runs in the worker, alongside the other jobs.
+    assert "transcode_backlog_job" in queue.jobs
+
+    garbage = client.post(
+        "/assets/upload",
+        files={"file": ("fake.mp4", b"not a video at all", "video/mp4")},
+        headers=auth_header(tokens),
+    )
+    assert garbage.status_code == 400
+
+
 def test_videos_embed_via_their_poster(tmp_path, session_and_user):
     """Once the poster exists, the (fake) embedder picks it up — videos
     become searchable without ever feeding raw video bytes to CLIP."""
