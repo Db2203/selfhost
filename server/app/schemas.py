@@ -36,6 +36,9 @@ class AssetUrls(BaseModel):
     grid: str | None
     preview: str | None
     original: str
+    # Videos only: the stream a browser can always play (H.264 rendition
+    # when one exists, otherwise the original).
+    playback: str | None = None
 
 
 class AssetOut(BaseModel):

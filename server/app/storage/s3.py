@@ -64,9 +64,20 @@ class S3Storage(Storage):
             response = await client.head_object(Bucket=self.bucket, Key=self._key(path))
             return response["ContentLength"]
 
-    async def stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
+    async def stream(
+        self,
+        path: str,
+        chunk_size: int = 1024 * 1024,
+        offset: int = 0,
+        length: int | None = None,
+    ) -> AsyncIterator[bytes]:
+        kwargs = {}
+        if offset or length is not None:
+            # S3 does the slicing server-side.
+            end = "" if length is None else str(offset + length - 1)
+            kwargs["Range"] = f"bytes={offset}-{end}"
         async with self._client() as client:
-            response = await client.get_object(Bucket=self.bucket, Key=self._key(path))
+            response = await client.get_object(Bucket=self.bucket, Key=self._key(path), **kwargs)
             # The body is an aiohttp response; size-bounded reads go through
             # its content StreamReader (plain .read() takes no size here).
             async with response["Body"] as body:

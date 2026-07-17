@@ -4,7 +4,7 @@ import uuid
 from pathlib import PurePosixPath
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ from app.storage import Storage, get_library_storage, get_media_storage
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
-VARIANTS = {"grid", "preview", "original"}
+VARIANTS = {"grid", "preview", "original", "playback"}
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
@@ -40,7 +40,64 @@ def asset_to_out(asset: Asset) -> AssetOut:
             grid=sign_asset_url(asset.id, "grid") if "grid" in kinds else None,
             preview=sign_asset_url(asset.id, "preview") if "preview" in kinds else None,
             original=sign_asset_url(asset.id, "original"),
+            playback=sign_asset_url(asset.id, "playback")
+            if asset.media_type == "video"
+            else None,
         ),
+    )
+
+
+def _parse_range(header: str | None, size: int) -> tuple[int, int] | None:
+    """Parse a single 'bytes=start-end' Range header against a known size.
+
+    Returns None to serve the whole file (no/unsupported header), raises 416
+    for a syntactically valid but unsatisfiable range. Multi-range requests
+    are legal to ignore — we answer with the full body.
+    """
+    if not header or not header.startswith("bytes=") or "," in header:
+        return None
+    start_s, _, end_s = header[len("bytes=") :].partition("-")
+    try:
+        if start_s == "":
+            # Suffix form: the last N bytes.
+            suffix = int(end_s)
+            if suffix <= 0:
+                return None
+            return max(0, size - suffix), size - 1
+        start = int(start_s)
+        end = int(end_s) if end_s else size - 1
+    except ValueError:
+        return None
+    end = min(end, size - 1)
+    if start >= size or start > end:
+        raise HTTPException(
+            status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+            headers={"Content-Range": f"bytes */{size}"},
+        )
+    return start, end
+
+
+async def _stream_file(
+    storage: Storage, path: str, content_type: str, request: Request
+) -> StreamingResponse:
+    """Serve a (potentially large) stored file with HTTP range support, so
+    browsers can seek around videos without downloading the whole thing."""
+    size = await storage.size(path)
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"}
+
+    byte_range = _parse_range(request.headers.get("range"), size)
+    if byte_range is None:
+        headers["Content-Length"] = str(size)
+        return StreamingResponse(storage.stream(path), media_type=content_type, headers=headers)
+
+    start, end = byte_range
+    headers["Content-Length"] = str(end - start + 1)
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return StreamingResponse(
+        storage.stream(path, offset=start, length=end - start + 1),
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+        media_type=content_type,
+        headers=headers,
     )
 
 
@@ -159,6 +216,7 @@ async def get_asset_file(
     variant: str,
     exp: int,
     sig: str,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     library: Annotated[Storage, Depends(get_library_storage)],
     media: Annotated[Storage, Depends(get_media_storage)],
@@ -172,23 +230,28 @@ async def get_asset_file(
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset")
 
-    if variant == "original":
-        # Indexed originals live in the read-only library; uploads in media.
+    if variant == "playback" and asset.playback_path is not None:
+        # The transcoded H.264 rendition (originals browsers can't play).
+        return await _stream_file(media, asset.playback_path, "video/mp4", request)
+
+    if variant in ("original", "playback"):
+        # playback without a rendition means the original is already
+        # web-safe. Indexed originals live in the read-only library;
+        # uploads in media.
         storage = library if asset.store == "library" else media
         path = asset.storage_path
         content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
-    else:
-        result = await session.execute(
-            select(Thumbnail).where(Thumbnail.asset_id == asset_id, Thumbnail.kind == variant)
-        )
-        thumb = result.scalar_one_or_none()
-        if thumb is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No thumbnail")
-        storage, path = media, thumb.storage_path
-        content_type = "image/webp"
+        return await _stream_file(storage, path, content_type, request)
+
+    result = await session.execute(
+        select(Thumbnail).where(Thumbnail.asset_id == asset_id, Thumbnail.kind == variant)
+    )
+    thumb = result.scalar_one_or_none()
+    if thumb is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No thumbnail")
 
     return StreamingResponse(
-        storage.stream(path),
-        media_type=content_type,
+        media.stream(thumb.storage_path),
+        media_type="image/webp",
         headers={"Cache-Control": "private, max-age=3600"},
     )

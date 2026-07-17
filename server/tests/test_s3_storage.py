@@ -72,6 +72,20 @@ def test_delete_stream_and_list(storage):
     asyncio.run(go())
 
 
+def test_stream_range_yields_exact_slice(storage):
+    async def go():
+        data = bytes(range(256)) * 40
+        await storage.write("clip.mp4", data)
+        chunks = [
+            c async for c in storage.stream("clip.mp4", chunk_size=100, offset=250, length=500)
+        ]
+        assert b"".join(chunks) == data[250:750]
+        tail = [c async for c in storage.stream("clip.mp4", offset=len(data) - 10)]
+        assert b"".join(tail) == data[-10:]
+
+    asyncio.run(go())
+
+
 def test_traversal_keys_are_rejected(storage):
     async def go():
         with pytest.raises(StoragePathError):
