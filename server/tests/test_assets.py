@@ -127,6 +127,35 @@ def test_tampered_or_expired_signature_is_rejected(populated, test_user):
     assert populated.get(swapped).status_code == 403
 
 
+def test_range_requests_serve_partial_content(populated, test_user):
+    tokens = login(populated, test_user)
+    item = populated.get("/assets", headers=auth_header(tokens)).json()["items"][0]
+    url = item["urls"]["original"]
+
+    whole = populated.get(url)
+    assert whole.status_code == 200
+    assert whole.headers["accept-ranges"] == "bytes"
+    total = len(whole.content)
+
+    part = populated.get(url, headers={"Range": "bytes=10-49"})
+    assert part.status_code == 206
+    assert part.content == whole.content[10:50]
+    assert part.headers["content-range"] == f"bytes 10-49/{total}"
+    assert part.headers["content-length"] == "40"
+
+    # Suffix and open-ended forms.
+    tail = populated.get(url, headers={"Range": "bytes=-5"})
+    assert tail.status_code == 206
+    assert tail.content == whole.content[-5:]
+    open_ended = populated.get(url, headers={"Range": f"bytes={total - 3}-"})
+    assert open_ended.content == whole.content[-3:]
+
+    # Past the end of the file: unsatisfiable.
+    bad = populated.get(url, headers={"Range": f"bytes={total + 10}-"})
+    assert bad.status_code == 416
+    assert bad.headers["content-range"] == f"bytes */{total}"
+
+
 def test_bare_file_url_without_signature_is_rejected(populated, test_user):
     tokens = login(populated, test_user)
     item = populated.get("/assets", headers=auth_header(tokens)).json()["items"][0]

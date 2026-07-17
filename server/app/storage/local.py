@@ -42,11 +42,28 @@ class LocalFilesystemStorage(Storage):
         stat = await asyncio.to_thread(self._resolve(path).stat)
         return stat.st_size
 
-    async def stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
+    async def stream(
+        self,
+        path: str,
+        chunk_size: int = 1024 * 1024,
+        offset: int = 0,
+        length: int | None = None,
+    ) -> AsyncIterator[bytes]:
         target = self._resolve(path)
         file = await asyncio.to_thread(target.open, "rb")
         try:
-            while chunk := await asyncio.to_thread(file.read, chunk_size):
+            if offset:
+                await asyncio.to_thread(file.seek, offset)
+            remaining = length
+            while True:
+                step = chunk_size if remaining is None else min(chunk_size, remaining)
+                if step <= 0:
+                    break
+                chunk = await asyncio.to_thread(file.read, step)
+                if not chunk:
+                    break
+                if remaining is not None:
+                    remaining -= len(chunk)
                 yield chunk
         finally:
             await asyncio.to_thread(file.close)

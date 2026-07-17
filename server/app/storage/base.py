@@ -30,7 +30,16 @@ class Storage(ABC):
     async def size(self, path: str) -> int: ...
 
     @abstractmethod
-    def stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]: ...
+    def stream(
+        self,
+        path: str,
+        chunk_size: int = 1024 * 1024,
+        offset: int = 0,
+        length: int | None = None,
+    ) -> AsyncIterator[bytes]:
+        """Yield the object's bytes; offset/length select a slice (for HTTP
+        range requests — video seeking needs them)."""
+        ...
 
     @abstractmethod
     def list_files(self, prefix: str = "") -> AsyncIterator[str]:

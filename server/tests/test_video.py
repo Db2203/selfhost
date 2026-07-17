@@ -172,6 +172,53 @@ def test_transcode_backlog_only_reencodes_what_browsers_cant_play(tmp_path, sess
     assert rendition.is_web_safe
 
 
+def test_playback_url_serves_the_watchable_stream(tmp_path, client, test_user):
+    """Videos expose urls.playback: the rendition when one exists, the
+    original when it's already web-safe."""
+    from app.storage import get_library_storage, get_media_storage
+    from tests.test_auth import auth_header, login
+
+    root = tmp_path / "library"
+    make_mp4(root / "safe.mp4", codec="libx264")
+    make_mp4(root / "iphone.mp4", codec="libx265")
+    library = LocalFilesystemStorage(root)
+    media = LocalFilesystemStorage(tmp_path / "media")
+    client.app.dependency_overrides[get_library_storage] = lambda: library
+    client.app.dependency_overrides[get_media_storage] = lambda: media
+
+    engine = client.app.state.test_engine
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    username, _ = test_user
+
+    async def go():
+        async with factory() as session:
+            user_id = (
+                await session.execute(select(User.id).where(User.username == username))
+            ).scalar_one()
+            await index_library(session, library, user_id)
+            await transcode_backlog(session, library, media)
+
+    asyncio.run(go())
+
+    tokens = login(client, test_user)
+    items = client.get("/assets", headers=auth_header(tokens)).json()["items"]
+    assert len(items) == 2
+    for item in items:
+        assert item["media_type"] == "video"
+        assert item["urls"]["playback"] is not None
+        assert item["duration_seconds"] == pytest.approx(1.0, abs=0.3)
+
+        # Every playback stream is an MP4 the browser can play, and it
+        # supports range requests so scrubbing works.
+        full = client.get(item["urls"]["playback"])
+        assert full.status_code == 200
+        assert full.headers["content-type"] == "video/mp4"
+        assert full.headers["accept-ranges"] == "bytes"
+        part = client.get(item["urls"]["playback"], headers={"Range": "bytes=0-99"})
+        assert part.status_code == 206
+        assert part.content == full.content[:100]
+
+
 def test_videos_embed_via_their_poster(tmp_path, session_and_user):
     """Once the poster exists, the (fake) embedder picks it up — videos
     become searchable without ever feeding raw video bytes to CLIP."""
