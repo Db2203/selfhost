@@ -96,6 +96,14 @@ class Asset(Base):
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     taken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    # Video-only: clip length in seconds (from ffprobe).
+    duration_seconds: Mapped[float | None] = mapped_column(Float)
+    # Video-only: media-storage path of the web-safe (H.264) rendition, or
+    # NULL when the original already plays in browsers. transcoded_at marks
+    # that the decision ran at all (same not-scanned/no-result split as
+    # faces_scanned_at below).
+    playback_path: Mapped[str | None] = mapped_column(String(1024))
+    transcoded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

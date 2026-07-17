@@ -119,10 +119,14 @@ async def detect_faces_backlog(
             ).scalar_one_or_none()
             if thumb is not None:
                 data = await media.read(thumb.storage_path)
-            else:
+            elif asset.media_type == "image":
                 # Library assets vs phone uploads (which live in media storage).
                 source = library if asset.store == "library" else media
                 data = await source.read(asset.storage_path)
+            else:
+                # Videos are scanned via their poster frame; leave
+                # faces_scanned_at unset so they're revisited once it exists.
+                continue
             for found in detector.detect(data):
                 x, y, w, h = found.bbox
                 session.add(

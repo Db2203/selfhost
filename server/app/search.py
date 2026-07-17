@@ -42,10 +42,13 @@ async def embed_backlog(
             ).scalar_one_or_none()
             if thumb is not None:
                 data = await media.read(thumb.storage_path)
-            else:
+            elif asset.media_type == "image":
                 # Library assets vs phone uploads (which live in media storage).
                 source = library if asset.store == "library" else media
                 data = await source.read(asset.storage_path)
+            else:
+                # Videos embed via their poster frame; wait until it exists.
+                continue
             asset.embedding = embedder.embed_image(data)
             await session.commit()
             report.embedded += 1

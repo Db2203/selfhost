@@ -46,6 +46,7 @@ class AssetOut(BaseModel):
     size_bytes: int
     taken_at: datetime | None
     created_at: datetime
+    duration_seconds: float | None = None  # videos only
     urls: AssetUrls
 
 

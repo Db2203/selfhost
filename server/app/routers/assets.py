@@ -35,6 +35,7 @@ def asset_to_out(asset: Asset) -> AssetOut:
         size_bytes=asset.size_bytes,
         taken_at=asset.taken_at,
         created_at=asset.created_at,
+        duration_seconds=asset.duration_seconds,
         urls=AssetUrls(
             grid=sign_asset_url(asset.id, "grid") if "grid" in kinds else None,
             preview=sign_asset_url(asset.id, "preview") if "preview" in kinds else None,
