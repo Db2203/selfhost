@@ -93,7 +93,8 @@ async def thumbnail_backlog(
 ) -> ThumbnailReport:
     """Generate thumbnails for every asset that is missing any kind."""
     report = ThumbnailReport()
-    result = await session.execute(select(Asset))
+    # Images only: video posters need a frame extracted first (see app.video).
+    result = await session.execute(select(Asset).where(Asset.media_type == "image"))
     for asset in result.scalars():
         try:
             made = await thumbnail_asset(session, library, media, asset)
