@@ -43,7 +43,9 @@ async def embed_backlog(
             if thumb is not None:
                 data = await media.read(thumb.storage_path)
             else:
-                data = await library.read(asset.storage_path)
+                # Library assets vs phone uploads (which live in media storage).
+                source = library if asset.store == "library" else media
+                data = await source.read(asset.storage_path)
             asset.embedding = embedder.embed_image(data)
             await session.commit()
             report.embedded += 1

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.indexer import index_library
-from app.models import Thumbnail, User
+from app.models import Asset, Thumbnail, User
 from app.security import hash_password
 from app.storage.local import LocalFilesystemStorage
 from app.thumbnailer import THUMBNAIL_KINDS, render_thumbnail, thumbnail_backlog
@@ -70,6 +70,35 @@ def test_backlog_generates_all_kinds_and_is_idempotent(stores, session_and_user)
             assert img.format == "WEBP"
             assert (img.width, img.height) == (thumb.width, thumb.height)
             assert max(img.size) <= THUMBNAIL_KINDS[thumb.kind]
+
+
+def test_uploaded_assets_thumbnail_from_media_storage(stores, session_and_user):
+    """Phone uploads live in media storage, not the library — the backlog
+    must read them from the right place instead of erroring out."""
+    library, media, media_root = stores
+    factory, user_id = session_and_user
+    make_jpeg(media_root / "uploads/ab/abcd.jpg", "purple", (800, 600))
+
+    async def go():
+        async with factory() as session:
+            session.add(
+                Asset(
+                    owner_id=user_id,
+                    storage_path="uploads/ab/abcd.jpg",
+                    store="uploads",
+                    content_hash="abcd",
+                    media_type="image",
+                    size_bytes=1,
+                    width=800,
+                    height=600,
+                )
+            )
+            await session.commit()
+            return await thumbnail_backlog(session, library, media)
+
+    report = asyncio.run(go())
+    assert report.errors == []
+    assert report.generated == len(THUMBNAIL_KINDS)
 
 
 def test_small_images_are_never_upscaled():
