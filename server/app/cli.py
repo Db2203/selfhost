@@ -56,7 +56,7 @@ async def _enqueue_index(username: str) -> str:
     )
     return (
         f"scanned={report['scanned']} added={report['added']}"
-        f" duplicates={report['skipped_duplicates']}"
+        f" duplicates={report['skipped_duplicates']} deleted={report['skipped_deleted']}"
         f" thumbnails={thumbs['generated']} transcoded={transcodes['transcoded']}"
         f" embedded={embeds['embedded']}"
         f" faces={faces['faces_found']} people+={clusters['new_people']}"

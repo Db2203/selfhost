@@ -119,6 +119,28 @@ class Asset(Base):
     faces: Mapped[list["Face"]] = relationship(back_populates="asset")
 
 
+class DeletedAsset(Base):
+    """Tombstone for a deleted asset, keyed by content hash.
+
+    The library folder is read-only — deleting a photo in the app can't
+    remove the file — so without this, the next re-index would quietly
+    resurrect everything the user deleted. Re-uploading the same content
+    is an explicit act and clears the tombstone.
+    """
+
+    __tablename__ = "deleted_assets"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "content_hash", name="uq_deleted_owner_hash"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    deleted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Person(Base):
     """A cluster of similar faces; named by the user."""
 
