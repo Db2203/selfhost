@@ -40,6 +40,8 @@ async def _enqueue_index(username: str) -> str:
         report = await job.result(timeout=3600)
         thumbs_job = await pool.enqueue_job("thumbnail_backlog_job")
         thumbs = await thumbs_job.result(timeout=3600)
+        transcode_job = await pool.enqueue_job("transcode_backlog_job")
+        transcodes = await transcode_job.result(timeout=7200)
         embed_job = await pool.enqueue_job("embed_backlog_job")
         embeds = await embed_job.result(timeout=7200)  # first run downloads CLIP
         faces_job = await pool.enqueue_job("detect_faces_job")
@@ -48,11 +50,15 @@ async def _enqueue_index(username: str) -> str:
         clusters = await cluster_job.result(timeout=3600)
     finally:
         await pool.close()
-    errors = report["errors"] + thumbs["errors"] + embeds["errors"] + faces["errors"]
+    errors = (
+        report["errors"] + thumbs["errors"] + transcodes["errors"]
+        + embeds["errors"] + faces["errors"]
+    )
     return (
         f"scanned={report['scanned']} added={report['added']}"
         f" duplicates={report['skipped_duplicates']}"
-        f" thumbnails={thumbs['generated']} embedded={embeds['embedded']}"
+        f" thumbnails={thumbs['generated']} transcoded={transcodes['transcoded']}"
+        f" embedded={embeds['embedded']}"
         f" faces={faces['faces_found']} people+={clusters['new_people']}"
         f" errors={len(errors)}" + ("".join(f"\n  ! {e}" for e in errors))
     )

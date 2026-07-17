@@ -18,7 +18,7 @@ from app.search import embed_backlog
 from app.security import hash_password
 from app.storage.local import LocalFilesystemStorage
 from app.thumbnailer import THUMBNAIL_KINDS, thumbnail_backlog
-from app.video import probe_video
+from app.video import probe_video, transcode_backlog
 
 pytestmark = pytest.mark.skipif(
     shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
@@ -26,13 +26,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def make_mp4(path, seconds=1.0, size="64x48", metadata=None):
-    """Render a tiny H.264 clip with ffmpeg's synthetic test source."""
+def make_mp4(path, seconds=1.0, size="64x48", metadata=None, codec="libx264"):
+    """Render a tiny clip with ffmpeg's synthetic test source."""
     path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "ffmpeg", "-v", "error", "-y",
         "-f", "lavfi", "-i", f"testsrc=duration={seconds}:size={size}:rate=10",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:v", codec, "-pix_fmt", "yuv420p",
     ]
     for key, value in (metadata or {}).items():
         cmd += ["-metadata", f"{key}={value}"]
@@ -137,6 +137,39 @@ def test_videos_get_poster_thumbnails(tmp_path, session_and_user):
             assert img.format == "WEBP"
             # testsrc frames are colorful; a decoded poster shouldn't be black.
             assert img.convert("L").getextrema()[1] > 32
+
+
+def test_transcode_backlog_only_reencodes_what_browsers_cant_play(tmp_path, session_and_user):
+    factory, user_id = session_and_user
+    root = tmp_path / "library"
+    make_mp4(root / "safe.mp4", codec="libx264")
+    make_mp4(root / "iphone.mp4", codec="libx265")  # HEVC, like iPhone camera
+    library = LocalFilesystemStorage(root)
+    media = LocalFilesystemStorage(tmp_path / "media")
+
+    async def go():
+        async with factory() as session:
+            await index_library(session, library, user_id)
+            first = await transcode_backlog(session, library, media)
+            second = await transcode_backlog(session, library, media)
+            result = await session.execute(select(Asset))
+            return first, second, {a.storage_path: a for a in result.scalars()}
+
+    first, second, assets = asyncio.run(go())
+
+    assert first.errors == []
+    assert first.already_web_safe == 1
+    assert first.transcoded == 1
+    # The decision is recorded either way, so re-runs are no-ops.
+    assert second.transcoded == 0 and second.already_web_safe == 0
+
+    safe, iphone = assets["safe.mp4"], assets["iphone.mp4"]
+    assert safe.transcoded_at is not None and safe.playback_path is None
+    assert iphone.transcoded_at is not None and iphone.playback_path is not None
+
+    # The rendition itself must be web-safe and playable.
+    rendition = asyncio.run(probe_video(tmp_path / "media" / iphone.playback_path))
+    assert rendition.is_web_safe
 
 
 def test_videos_embed_via_their_poster(tmp_path, session_and_user):

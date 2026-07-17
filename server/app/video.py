@@ -1,4 +1,4 @@
-"""Video probing via ffprobe (metadata for the indexer).
+"""Video handling: ffprobe metadata, poster frames, web-safe renditions.
 
 ffmpeg/ffprobe are system binaries (in the Docker image; installed locally
 for dev), driven over subprocess — no heavy Python video bindings. Probing
@@ -8,13 +8,20 @@ the file), so storage objects are spooled to a temp file first.
 
 import asyncio
 import json
+import logging
 import tempfile
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Asset
 from app.storage.base import Storage
+
+logger = logging.getLogger(__name__)
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v"}
 
@@ -112,6 +119,81 @@ async def extract_poster_frame(local_path: str | Path, at_seconds: float = 1.0) 
         if proc.returncode == 0 and stdout:
             return stdout
     raise FfmpegError(stderr.decode(errors="replace").strip() or "no frame extracted")
+
+
+def playback_path(content_hash: str) -> str:
+    return f"playback/{content_hash[:2]}/{content_hash}.mp4"
+
+
+async def transcode_to_web_safe(local_in: Path, local_out: Path) -> None:
+    """Re-encode to H.264/AAC MP4 — the rendition browsers can always play.
+
+    faststart puts the index at the front of the file so playback starts
+    before the whole thing is downloaded. The scale filter rounds odd
+    dimensions down: yuv420p H.264 requires them even.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-v", "error", "-y",
+        "-i", str(local_in),
+        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        str(local_out),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise FfmpegError(stderr.decode(errors="replace").strip() or "transcode failed")
+
+
+@dataclass
+class TranscodeReport:
+    transcoded: int = 0
+    already_web_safe: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
+async def transcode_backlog(
+    session: AsyncSession, library: Storage, media: Storage
+) -> TranscodeReport:
+    """Decide playback for every video that hasn't been considered yet.
+
+    Web-safe originals are just marked (playback_path stays NULL and the
+    file endpoint serves the original); everything else gets an H.264
+    rendition written to media storage. Keyed on content hash, so re-runs
+    and interrupted runs only fill in what's missing.
+    """
+    report = TranscodeReport()
+    result = await session.execute(
+        select(Asset).where(Asset.media_type == "video", Asset.transcoded_at.is_(None))
+    )
+    for asset in result.scalars():
+        try:
+            source = library if asset.store == "library" else media
+            async with spooled_local_copy(source, asset.storage_path) as (local, _):
+                info = await probe_video(local)
+                if info.is_web_safe:
+                    report.already_web_safe += 1
+                else:
+                    rendition = local.with_suffix(".playback.mp4")
+                    try:
+                        await transcode_to_web_safe(local, rendition)
+                        target = playback_path(asset.content_hash)
+                        await media.write(target, rendition.read_bytes())
+                        asset.playback_path = target
+                    finally:
+                        rendition.unlink(missing_ok=True)
+                    report.transcoded += 1
+            asset.transcoded_at = datetime.now(timezone.utc)
+            await session.commit()
+        except Exception as exc:  # one bad file must not kill the backlog
+            await session.rollback()
+            logger.exception("transcode failed for %s", asset.storage_path)
+            report.errors.append(f"{asset.storage_path}: {exc}")
+    return report
 
 
 @asynccontextmanager
